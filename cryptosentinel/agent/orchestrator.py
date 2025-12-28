@@ -3,7 +3,7 @@ LangGraph-based orchestrator for autonomous causal discovery agent.
 """
 
 from typing import Annotated, Literal, TypedDict, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from operator import add
 import json
 
@@ -26,7 +26,9 @@ from .models import (
     DataSource,
     CausalMethod,
 )
+from .asset_registry import get_asset_registry
 from .domain import DomainRegistry, VariableRegistry
+from .dataframe_builder import CanonicalDataFrameBuilder
 try:
     from .hypothesis_generator import HypothesisGenerator
     from .data_discovery import DataSourceDiscovery
@@ -74,6 +76,7 @@ class CausalDiscoveryAgent:
     
     def __init__(self, settings: Settings = None):
         self.settings = settings or get_settings()
+        self.offline_mode = getattr(self.settings, "offline_mode", False)
         if AGENT_MODULES_AVAILABLE:
             self.hypothesis_generator = HypothesisGenerator(self.settings)
             self.data_discovery = DataSourceDiscovery(self.settings)
@@ -84,6 +87,10 @@ class CausalDiscoveryAgent:
             self.confounder_discovery = None
         self.variable_registry = VariableRegistry()
         self.domain_registry: Dict[str, DomainRegistry] = {}
+        # Initialize DataFrame builder with data directory from settings if available
+        data_dir = getattr(self.settings, 'canonical_data_dir', None) if self.settings else None
+        self.dataframe_builder = CanonicalDataFrameBuilder(data_dir=data_dir)
+        self.offline_df = self._load_offline_sample_df() if self.offline_mode else None
         
         # Build LangGraph
         self.graph = self._build_graph()
@@ -92,6 +99,52 @@ class CausalDiscoveryAgent:
             self.app = self.graph.compile(checkpointer=self.checkpointer)
         else:
             self.app = None
+    
+    def _load_offline_sample_df(self):
+        """Load a bundled offline demo DataFrame if available."""
+        try:
+            df = self.dataframe_builder.load_from_csv("bitcoin", suffix="offline_demo")
+            if df is None:
+                logger.warning("Offline demo CSV not found; offline mode will run without data.")
+            return df
+        except Exception as e:
+            logger.warning(f"Failed to load offline demo CSV: {e}")
+            return None
+
+    def _offline_hypotheses(self, domain: str) -> tuple[list[Hypothesis], list[Hypothesis]]:
+        """Provide static hypotheses for offline/demo mode."""
+        registry = get_asset_registry()
+        cause1 = registry.get_variable("avg_sentiment", domain)
+        effect1 = registry.get_variable("price_usd", domain)
+        cause2 = registry.get_variable("post_count", domain)
+        effect2 = registry.get_variable("price_change_24h_pct", domain) or registry.get_variable("return_pct", domain)
+
+        hypotheses: list[Hypothesis] = []
+        if cause1 and effect1:
+            hypotheses.append(
+                Hypothesis(
+                    cause=cause1,
+                    effect=effect1,
+                    mechanism="Higher social sentiment may precede price increases.",
+                    confidence=0.6,
+                    suggested_methods=[CausalMethod.GRANGER, CausalMethod.TRANSFER_ENTROPY],
+                    hypothesis_id=f"{domain}_offline_sentiment_price",
+                    metadata={"offline_demo": True},
+                )
+            )
+        if cause2 and effect2:
+            hypotheses.append(
+                Hypothesis(
+                    cause=cause2,
+                    effect=effect2,
+                    mechanism="Rising post volume may signal momentum affecting returns.",
+                    confidence=0.55,
+                    suggested_methods=[CausalMethod.GRANGER, CausalMethod.TRANSFER_ENTROPY],
+                    hypothesis_id=f"{domain}_offline_posts_returns",
+                    metadata={"offline_demo": True},
+                )
+            )
+        return hypotheses, []
     
     def _build_graph(self):
         """Build the LangGraph state graph."""
@@ -149,12 +202,20 @@ class CausalDiscoveryAgent:
         logger.info(f"Generating hypotheses for domain: {state['domain']}")
         
         try:
-            if not self.hypothesis_generator:
-                raise RuntimeError("Hypothesis generator not available")
-            hypotheses = self.hypothesis_generator.generate(
-                domain=state["domain"],
-                query=state["query"],
-            )
+            if self.offline_mode:
+                hypotheses, wish_list = self._offline_hypotheses(state["domain"])
+            else:
+                if not self.hypothesis_generator:
+                    raise RuntimeError("Hypothesis generator not available")
+                result = self.hypothesis_generator.generate(
+                    domain=state["domain"],
+                    query=state["query"],
+                    include_wish_list=True,
+                )
+                if isinstance(result, tuple) and len(result) == 2:
+                    hypotheses, wish_list = result
+                else:
+                    hypotheses, wish_list = [], []
             
             # Register variables from hypotheses
             new_variables = []
@@ -163,13 +224,17 @@ class CausalDiscoveryAgent:
                 self.variable_registry.register(hyp.effect)
                 new_variables.extend([hyp.cause, hyp.effect])
             
-            logger.info(f"Generated {len(hypotheses)} hypotheses")
+            logger.info(f"Generated {len(hypotheses)} testable hypotheses, {len(wish_list)} wish list entries")
             
             return {
                 "hypotheses": hypotheses,
                 "discovered_variables": new_variables,
                 "status": "HYPOTHESIS_GENERATION",
-                "metadata": {"hypothesis_count": len(hypotheses)},
+                "metadata": {
+                    "hypothesis_count": len(hypotheses),
+                    "wish_list_count": len(wish_list),
+                    "wish_list": [{"cause": h.cause.name, "effect": h.effect.name, "unavailable": h.metadata.get("unavailable_variables", [])} for h in wish_list],
+                },
             }
             
         except Exception as e:
@@ -184,6 +249,13 @@ class CausalDiscoveryAgent:
         logger.info("Discovering data sources")
         
         try:
+            if self.offline_mode:
+                return {
+                    "active_data_sources": [],
+                    "status": "DATA_DISCOVERY",
+                    "metadata": {"data_source_count": 0, "offline_demo": True},
+                }
+
             all_sources = []
             
             if not self.data_discovery:
@@ -226,6 +298,12 @@ class CausalDiscoveryAgent:
         logger.info("Integrating pipelines via Confluent")
         
         try:
+            if self.offline_mode:
+                return {
+                    "status": "PIPELINE_INTEGRATION",
+                    "metadata": {"pipelines_created": 0, "offline_demo": True},
+                }
+
             try:
                 from agent.confluent_client import ConfluentClient
             except ImportError:
@@ -265,6 +343,12 @@ class CausalDiscoveryAgent:
         logger.info("Collecting data from sources")
         
         try:
+            if self.offline_mode:
+                return {
+                    "status": "DATA_COLLECTION",
+                    "metadata": {"data_collected": True, "offline_demo": True},
+                }
+
             import sys
             import os
             # Add parent directory to path to import producers module
@@ -277,8 +361,12 @@ class CausalDiscoveryAgent:
             
             for source in state["active_data_sources"]:
                 producer = factory.create_producer(source)
+                if not producer:
+                    logger.info(f"Skipping producer startup for {source.name} (no producer available)")
+                    continue
                 # Start producer in background (in real implementation)
-                logger.info(f"Started producer for: {source.name}")
+                # Producer would be started/registered here
+                logger.info(f"Started producer for: {source.name} ({producer.__class__.__name__})")
             
             # Wait for data collection (in real implementation, this would be async)
             return {
@@ -294,7 +382,7 @@ class CausalDiscoveryAgent:
             }
     
     def _run_causal_tests_node(self, state: AgentState) -> dict:
-        """Run causal inference tests on hypotheses."""
+        """Run causal inference tests on hypotheses using canonical DataFrame."""
         logger.info("Running causal inference tests")
         
         try:
@@ -306,7 +394,49 @@ class CausalDiscoveryAgent:
             registry = CausalEngineRegistry()
             results = []
             
+            # Try to get data from in-memory DataStore if available
+            # This is a fallback - in production, data would come from Kafka
+            price_history = None
+            sentiment_history = None
+            coin_id = "bitcoin"  # Default, should be configurable
+            df_from_csv = self.offline_df if self.offline_mode else None
+            df_from_csv = None  # Placeholder until CSV loading is implemented
+            
+            try:
+                from api.main import data_store
+                if coin_id in data_store.price_history:
+                    price_history = list(data_store.price_history[coin_id])
+                if coin_id in data_store.sentiment_history:
+                    sentiment_history = list(data_store.sentiment_history[coin_id])
+            except (ImportError, AttributeError):
+                logger.debug("DataStore not available, will use placeholder data")
+            
             for hypothesis in state["hypotheses"]:
+                # Build canonical DataFrame for this hypothesis
+                df = None
+                
+                # Try to use CSV data first (if we loaded it)
+                if df_from_csv is not None:
+                    # Use the full DataFrame and let build_for_hypothesis extract relevant columns
+                    df = self.dataframe_builder.build_for_hypothesis(
+                        hypothesis=hypothesis,
+                        coin_id=coin_id,
+                        price_history=None,  # Not needed if using CSV
+                        sentiment_history=None,
+                    )
+                    # If that didn't work, build from the CSV DataFrame
+                    if df is None:
+                        df = df_from_csv.copy()
+                
+                # Fallback to building from DataStore
+                if df is None and price_history and sentiment_history:
+                    df = self.dataframe_builder.build_for_hypothesis(
+                        hypothesis=hypothesis,
+                        coin_id=coin_id,
+                        price_history=price_history,
+                        sentiment_history=sentiment_history,
+                    )
+                
                 # Try each suggested method
                 for method in hypothesis.suggested_methods:
                     try:
@@ -314,13 +444,20 @@ class CausalDiscoveryAgent:
                         if not engine:
                             logger.warning(f"Engine not available for method: {method.value}")
                             continue
+                        
+                        # Pass pre-built DataFrame if available
                         result = engine.test(
                             cause=hypothesis.cause,
                             effect=hypothesis.effect,
                             data_sources=hypothesis.required_data_sources,
+                            data=df,  # Use canonical DataFrame
+                            confounders=hypothesis.potential_confounders,
                         )
                         results.append(result)
-                        logger.info(f"Tested {hypothesis.cause.name} -> {hypothesis.effect.name} using {method.value}")
+                        logger.info(
+                            f"Tested {hypothesis.cause.name} -> {hypothesis.effect.name} "
+                            f"using {method.value} (data: {'canonical' if df is not None else 'fetched'})"
+                        )
                     except Exception as e:
                         logger.warning(f"Method {method.value} failed: {e}")
                         continue
@@ -507,6 +644,13 @@ class CausalDiscoveryAgent:
             "messages": [],
         }
 
+        config = config or {}
+        if config.get("offline_mode") is not None:
+            self.offline_mode = bool(config["offline_mode"])
+        if self.offline_mode and self.offline_df is None:
+            # Try to load offline data if enabled later
+            self.offline_df = self._load_offline_sample_df()
+
         def apply_update(current: dict, update: dict) -> dict:
             """Apply partial state updates while preserving initial keys."""
             result = dict(current)
@@ -519,8 +663,7 @@ class CausalDiscoveryAgent:
                     result[key] = value
             return result
         
-        config = config or {}
-        thread_id = config.get("thread_id", f"discovery_{datetime.utcnow().timestamp()}")
+        thread_id = config.get("thread_id", f"discovery_{datetime.now(timezone.utc).timestamp()}")
         
         # Run the graph
         final_state = None

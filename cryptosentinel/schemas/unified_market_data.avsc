@@ -1,0 +1,90 @@
+{
+  "type": "record",
+  "name": "UnifiedMarketData",
+  "namespace": "com.cryptosentinel.analytics",
+  "doc": "Unified market data record combining price, sentiment, and market indicators",
+  "fields": [
+    {
+      "name": "timestamp_ms",
+      "type": "long",
+      "doc": "Unix timestamp in milliseconds when data was collected"
+    },
+    {
+      "name": "coin_id",
+      "type": "string",
+      "doc": "Cryptocurrency identifier (e.g., bitcoin, ethereum)"
+    },
+    {
+      "name": "price_usd",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Current price in USD from CoinGecko"
+    },
+    {
+      "name": "volume_24h",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "24-hour trading volume in USD"
+    },
+    {
+      "name": "price_change_24h_pct",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "24-hour price change percentage"
+    },
+    {
+      "name": "market_cap",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Market capitalization in USD"
+    },
+    {
+      "name": "fear_greed_value",
+      "type": ["null", "int"],
+      "default": null,
+      "doc": "Fear & Greed Index value (0-100)"
+    },
+    {
+      "name": "fear_greed_classification",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Fear & Greed classification (Extreme Fear, Fear, Neutral, Greed, Extreme Greed)"
+    },
+    {
+      "name": "news_count",
+      "type": "int",
+      "default": 0,
+      "doc": "Number of news articles in collection window"
+    },
+    {
+      "name": "news_sentiment_avg",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Average news sentiment (-1.0 to 1.0)"
+    },
+    {
+      "name": "news_positive_count",
+      "type": "int",
+      "default": 0,
+      "doc": "Count of positive news articles"
+    },
+    {
+      "name": "news_negative_count",
+      "type": "int",
+      "default": 0,
+      "doc": "Count of negative news articles"
+    },
+    {
+      "name": "sources_available",
+      "type": "string",
+      "doc": "Comma-separated list of data sources that contributed to this record"
+    },
+    {
+      "name": "collection_latency_ms",
+      "type": ["null", "int"],
+      "default": null,
+      "doc": "Time taken to collect data from all sources in milliseconds"
+    }
+  ]
+}
+
