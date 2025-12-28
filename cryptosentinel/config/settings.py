@@ -87,6 +87,18 @@ class Settings(BaseSettings):
     )
 
     # -------------------------------------------------------------------------
+    # News APIs
+    # -------------------------------------------------------------------------
+    newsdata_api_key: Optional[str] = Field(
+        default=None,
+        description="NewsData.io API key (free tier: 200 req/day)",
+    )
+    gnews_api_key: Optional[str] = Field(
+        default=None,
+        description="GNews API key (free tier: 100 req/day, backup)",
+    )
+
+    # -------------------------------------------------------------------------
     # Application Settings
     # -------------------------------------------------------------------------
     # These are stored as comma-separated strings in .env
@@ -110,6 +122,12 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = Field(default="INFO")
+
+    # Offline/demo mode
+    offline_mode: bool = Field(
+        default=False,
+        description="Run in offline demo mode (no external services)",
+    )
 
     # -------------------------------------------------------------------------
     # Agent Configuration

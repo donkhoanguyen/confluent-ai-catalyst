@@ -41,6 +41,9 @@ class ProducerFactory:
             producer = self._create_websocket_producer(source)
         elif source.source_type == DataSourceType.KAFKA_TOPIC:
             producer = self._create_kafka_consumer_producer(source)
+        elif source.source_type == DataSourceType.DATABASE:
+            logger.info(f"No producer needed for DATABASE source: {source.name}")
+            producer = None
         else:
             raise ValueError(f"Unsupported source type: {source.source_type}")
         

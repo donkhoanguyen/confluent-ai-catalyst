@@ -75,7 +75,7 @@ class ConfluentClient:
             topic = NewTopic(
                 topic_name,
                 num_partitions=3,
-                replication_factor=1,  # Adjust based on cluster config
+                replication_factor=3,  # Confluent Cloud policy requires RF=3
                 config={
                     "retention.ms": "604800000",  # 7 days
                 }

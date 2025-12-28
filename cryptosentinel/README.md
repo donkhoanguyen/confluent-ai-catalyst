@@ -8,6 +8,19 @@ Built with Confluent Kafka, Google Gemini AI, and streaming causal inference.
 
 ---
 
+## 📋 Development Process
+
+We use a **parallel development** approach with two independent tracks:
+
+| Track | Focus | Key Files |
+|-------|-------|-----------|
+| **Track 1: Data Integration** | Kafka, APIs, Enrichment | `producers/`, `consumers/`, `api/` |
+| **Track 2: Causal Engine** | Statistical analysis, AI | `causal/`, `agent/`, `dashboard/` |
+
+See **[DEVELOPMENT_PROCESS.md](../DEVELOPMENT_PROCESS.md)** for full details on file ownership, integration points, and workflow.
+
+---
+
 ## 🎯 Key Features
 
 - **Real-Time Streaming**: Reddit posts and crypto prices streamed through Confluent Kafka

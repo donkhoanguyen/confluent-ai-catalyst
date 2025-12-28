@@ -3,8 +3,10 @@
 Example script showing how to use the Autonomous Causal Discovery Agent.
 
 Run this after setting up your .env file:
-    python example_agent_usage.py
+    python example_agent_usage.py [--offline]
 """
+
+import argparse
 
 from agent.orchestrator import CausalDiscoveryAgent
 from config.settings import get_settings
@@ -13,56 +15,16 @@ from loguru import logger
 # Configure logging
 logger.add("agent_discovery.log", rotation="10 MB")
 
-def show_agent_mermaid_ipython(agent):
-    """
-    Display the agent's orchestration flow as a rendered image using IPython.display,
-    if run in a notebook or environment with IPython.
-    """
-    try:
-        from IPython.display import Image, display
-        import requests
-        import base64
-        mermaid = None
-
-        # Try to fetch the Mermaid source from the agent
-        if hasattr(agent, "mermaid"):
-            mermaid = agent.mermaid() if callable(agent.mermaid) else agent.mermaid
-        elif hasattr(agent, "as_mermaid"):
-            mermaid = agent.as_mermaid() if callable(agent.as_mermaid) else agent.as_mermaid
-        elif hasattr(agent, "graph") and hasattr(agent.graph, "to_mermaid"):
-            mermaid = agent.graph.to_mermaid()
-        if not mermaid:
-            print("(No agent-generated Mermaid diagram available.)")
-            return
-
-        # Render via a public Mermaid live renderer API (for local/dev use only)
-        # See: https://github.com/mermaid-js/mermaid.live
-        url = "https://mermaid.ink/img/" + base64.urlsafe_b64encode(mermaid.encode("utf-8")).decode("utf-8")
-        response = requests.get(url)
-        if response.ok:
-            display(Image(response.content))
-        else:
-            print("Couldn't render Mermaid diagram with online API.")
-            print(mermaid)
-    except ImportError:
-        print("(IPython is not available. Install 'ipython' to view Mermaid graph inline.)")
-        # Just print the Mermaid source
-        # Try to print the diagram source for visual context
-        if hasattr(agent, "mermaid"):
-            mermaid = agent.mermaid() if callable(agent.mermaid) else agent.mermaid
-            if mermaid:
-                print("\nAgent Orchestration Flow (Mermaid source):\n")
-                print(mermaid)
-    except Exception as e:
-        print("Could not display Mermaid image:", str(e))
-        if hasattr(agent, "mermaid"):
-            mermaid = agent.mermaid() if callable(agent.mermaid) else agent.mermaid
-            if mermaid:
-                print("\nAgent Orchestration Flow (Mermaid source):\n")
-                print(mermaid)
-
 def main():
     """Example usage of the causal discovery agent."""
+    parser = argparse.ArgumentParser(description="Run the causal discovery agent demo.")
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Run offline demo with bundled sample data (no external services)",
+    )
+    args = parser.parse_args()
+
     print("=" * 70)
     print("🤖 Autonomous Causal Discovery Agent - Example Usage")
     print("=" * 70)
@@ -71,12 +33,12 @@ def main():
     # Initialize agent
     print("📦 Initializing agent...")
     settings = get_settings()
+    if args.offline:
+        settings.offline_mode = True
+        print("🔒 Offline mode enabled (using bundled sample data).")
     agent = CausalDiscoveryAgent(settings)
     print("✅ Agent initialized!")
     print()
-
-    # Display the agent's internal mermaid graph as an image if possible
-    show_agent_mermaid_ipython(agent)
 
     # Example 1: Crypto market analysis
     print("🔍 Example 1: Crypto Market Analysis")
@@ -88,7 +50,7 @@ def main():
     result = agent.discover(
         domain="cryptocurrency",
         query="Does social sentiment cause price movements?",
-        config={"thread_id": "example_crypto_1"}
+        config={"thread_id": "example_crypto_1", "offline_mode": settings.offline_mode}
     )
 
     print(f"Status: {result.status}")

@@ -102,8 +102,19 @@ class DashboardState(BaseModel):
 class DataStore:
     """In-memory store for real-time data."""
 
-    def __init__(self, max_history: int = 1000):
+    def __init__(self, max_history: int = 1000, auto_save_csv: bool = True, csv_save_interval: int = 10):
+        """
+        Initialize DataStore.
+        
+        Args:
+            max_history: Maximum number of history records to keep
+            auto_save_csv: If True, automatically save to CSV when data is updated
+            csv_save_interval: Save to CSV every N updates (to avoid too frequent writes)
+        """
         self.max_history = max_history
+        self.auto_save_csv = auto_save_csv
+        self.csv_save_interval = csv_save_interval
+        self._update_count: Dict[str, int] = {}  # Track updates per coin for batching
 
         # Current prices by coin_id
         self.prices: Dict[str, PriceData] = {}
@@ -131,6 +142,19 @@ class DataStore:
 
         # Connected WebSocket clients
         self.websocket_clients: List[WebSocket] = []
+        
+        # Initialize DataFrame builder for CSV persistence
+        if self.auto_save_csv:
+            try:
+                from agent.dataframe_builder import CanonicalDataFrameBuilder
+                self.df_builder = CanonicalDataFrameBuilder()
+                logger.info("DataStore CSV auto-save enabled")
+            except ImportError:
+                logger.warning("DataFrame builder not available, CSV auto-save disabled")
+                self.auto_save_csv = False
+                self.df_builder = None
+        else:
+            self.df_builder = None
 
     def update_price(self, price: PriceData):
         """Update price data for a coin."""
@@ -144,6 +168,10 @@ class DataStore:
             "price_usd": price.price_usd,
             "return_pct": price.price_change_24h_pct,
         })
+        
+        # Auto-save to CSV if enabled
+        if self.auto_save_csv and self.df_builder:
+            self._maybe_save_to_csv(price.coin_id)
 
     def update_sentiment(self, sentiment: SentimentData):
         """Update sentiment data for a coin."""
@@ -157,6 +185,10 @@ class DataStore:
             "avg_sentiment": sentiment.avg_sentiment,
             "post_count": sentiment.post_count,
         })
+        
+        # Auto-save to CSV if enabled
+        if self.auto_save_csv and self.df_builder:
+            self._maybe_save_to_csv(sentiment.coin_id)
 
     def add_post(self, post: RedditPostResponse):
         """Add a new enriched post."""
@@ -233,10 +265,92 @@ class DataStore:
             alerts=list(self.alerts)[:10],
             last_updated=datetime.now(timezone.utc),
         )
+    
+    def _maybe_save_to_csv(self, coin_id: str):
+        """
+        Conditionally save data to CSV (batched to avoid too frequent writes).
+        
+        Args:
+            coin_id: Coin identifier
+        """
+        # Track update count for this coin
+        if coin_id not in self._update_count:
+            self._update_count[coin_id] = 0
+        self._update_count[coin_id] += 1
+        
+        # Save every N updates or if we have enough data
+        should_save = (
+            self._update_count[coin_id] % self.csv_save_interval == 0 or
+            (coin_id in self.price_history and len(self.price_history[coin_id]) >= 100)
+        )
+        
+        if should_save:
+            try:
+                # Build DataFrame from current history
+                price_hist = list(self.price_history.get(coin_id, []))
+                sentiment_hist = list(self.sentiment_history.get(coin_id, []))
+                
+                if price_hist and sentiment_hist:
+                    df = self.df_builder.build_from_datastore(
+                        coin_id=coin_id,
+                        price_history=price_hist,
+                        sentiment_history=sentiment_hist,
+                        save_to_csv=True,  # Auto-save
+                    )
+                    if df is not None:
+                        logger.debug(f"Auto-saved {coin_id} data to CSV ({len(df)} rows)")
+                        # Reset counter after successful save
+                        self._update_count[coin_id] = 0
+            except Exception as e:
+                logger.warning(f"Failed to auto-save {coin_id} to CSV: {e}")
+    
+    def force_save_to_csv(self, coin_id: str) -> Optional[str]:
+        """
+        Force immediate save of current data to CSV.
+        
+        Args:
+            coin_id: Coin identifier
+            
+        Returns:
+            Path to saved CSV file or None if failed
+        """
+        if not self.df_builder:
+            logger.warning("DataFrame builder not available")
+            return None
+        
+        try:
+            price_hist = list(self.price_history.get(coin_id, []))
+            sentiment_hist = list(self.sentiment_history.get(coin_id, []))
+            
+            if not price_hist or not sentiment_hist:
+                logger.warning(f"Insufficient data for {coin_id} to save to CSV")
+                return None
+            
+            df = self.df_builder.build_from_datastore(
+                coin_id=coin_id,
+                price_history=price_hist,
+                sentiment_history=sentiment_hist,
+                save_to_csv=True,
+            )
+            
+            if df is not None:
+                csv_path = self.df_builder.get_latest_csv_path(coin_id)
+                logger.info(f"Force-saved {coin_id} data to CSV: {csv_path}")
+                return str(csv_path) if csv_path else None
+            
+        except Exception as e:
+            logger.error(f"Error force-saving {coin_id} to CSV: {e}")
+            return None
+        
+        return None
 
 
-# Initialize data store
-data_store = DataStore()
+# Initialize data store with CSV auto-save enabled
+# Set via environment variable DATASTORE_AUTO_SAVE_CSV=true/false (default: true)
+import os
+auto_save_csv = os.getenv("DATASTORE_AUTO_SAVE_CSV", "true").lower() == "true"
+csv_save_interval = int(os.getenv("DATASTORE_CSV_SAVE_INTERVAL", "10"))  # Save every 10 updates
+data_store = DataStore(auto_save_csv=auto_save_csv, csv_save_interval=csv_save_interval)
 
 
 # =============================================================================
@@ -474,6 +588,35 @@ async def trigger_causal_analysis(coin_id: str):
         await broadcast_update("causal", result.model_dump(mode="json"))
         return result
     return {"error": "Insufficient data"}
+
+
+@app.post("/api/save/csv/{coin_id}")
+async def save_coin_to_csv(coin_id: str):
+    """Manually trigger CSV save for a coin."""
+    csv_path = data_store.force_save_to_csv(coin_id)
+    if csv_path:
+        return {"status": "ok", "csv_path": csv_path}
+    return {"error": f"Failed to save {coin_id} to CSV"}
+
+
+@app.get("/api/csv/list")
+async def list_csv_files():
+    """List all available CSV files."""
+    if not data_store.df_builder:
+        return {"error": "CSV functionality not available"}
+    
+    coins = data_store.df_builder.list_available_coins()
+    files = []
+    for coin in coins:
+        path = data_store.df_builder.get_latest_csv_path(coin)
+        if path:
+            files.append({
+                "coin_id": coin,
+                "latest_file": str(path),
+                "exists": path.exists(),
+            })
+    
+    return {"coins": coins, "files": files}
 
 
 # =============================================================================
