@@ -44,6 +44,10 @@ class ProducerFactory:
         elif source.source_type == DataSourceType.DATABASE:
             logger.info(f"No producer needed for DATABASE source: {source.name}")
             producer = None
+        elif source.source_type == DataSourceType.FILE:
+            # FILE sources are typically local canonical/offline datasets; nothing to "collect" in real time.
+            logger.info(f"No producer needed for FILE source: {source.name}")
+            producer = None
         else:
             raise ValueError(f"Unsupported source type: {source.source_type}")
         

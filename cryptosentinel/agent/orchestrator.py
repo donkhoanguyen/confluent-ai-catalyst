@@ -89,14 +89,26 @@ class CausalDiscoveryAgent:
     def __init__(self, settings: Settings = None):
         self.settings = settings or get_settings()
         self.offline_mode = getattr(self.settings, "offline_mode", False)
-        if AGENT_MODULES_AVAILABLE:
-            self.hypothesis_generator = HypothesisGenerator(self.settings)
-            self.data_discovery = DataSourceDiscovery(self.settings)
-            self.confounder_discovery = ConfounderDiscovery(self.settings)
+        
+        # Only initialize LLM-dependent modules if not in offline mode
+        # and if the modules are available
+        if AGENT_MODULES_AVAILABLE and not self.offline_mode:
+            try:
+                self.hypothesis_generator = HypothesisGenerator(self.settings)
+                self.data_discovery = DataSourceDiscovery(self.settings)
+                self.confounder_discovery = ConfounderDiscovery(self.settings)
+            except ValueError as e:
+                # GCP_PROJECT_ID not set - fall back to None
+                logger.warning(f"LLM modules unavailable: {e}")
+                self.hypothesis_generator = None
+                self.data_discovery = None
+                self.confounder_discovery = None
         else:
             self.hypothesis_generator = None
             self.data_discovery = None
             self.confounder_discovery = None
+            if self.offline_mode:
+                logger.info("Offline mode: skipping LLM module initialization")
         self.variable_registry = VariableRegistry()
         self.domain_registry: Dict[str, DomainRegistry] = {}
         # Initialize DataFrame builder with data directory from settings if available

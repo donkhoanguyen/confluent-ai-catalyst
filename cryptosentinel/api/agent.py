@@ -59,11 +59,22 @@ async def start_discovery(request: DiscoveryRequest):
             query=request.query,
             config=request.config or {},
         )
+
+        def _safe_result_to_dict(r):
+            # Prefer the canonical conversion
+            if hasattr(r, "to_dict") and callable(getattr(r, "to_dict")):
+                return r.to_dict()
+            # Allow dict-ish results without crashing the API
+            if isinstance(r, dict):
+                return r
+            # Last resort: stringify so the API doesn't 500
+            logger.warning(f"Unexpected result type in state.results: {type(r)} -> {r!r}")
+            return {"error": "unexpected_result_type", "type": str(type(r)), "value": str(r)}
         
         return DiscoveryResponse(
             state=state.__dict__,
             hypotheses=[h.__dict__ for h in state.hypotheses],
-            results=[r.to_dict() for r in state.results],
+            results=[_safe_result_to_dict(r) for r in state.results],
             status=state.status,
         )
     except Exception as e:
