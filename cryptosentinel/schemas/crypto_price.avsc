@@ -1,0 +1,47 @@
+{
+  "type": "record",
+  "name": "CryptoPrice",
+  "namespace": "com.cryptosentinel.market",
+  "doc": "Cryptocurrency price data from CoinGecko",
+  "fields": [
+    {
+      "name": "coin_id",
+      "type": "string",
+      "doc": "Coin identifier (bitcoin, ethereum, etc.)"
+    },
+    {
+      "name": "symbol",
+      "type": "string",
+      "doc": "Coin symbol (BTC, ETH, etc.)"
+    },
+    {
+      "name": "price_usd",
+      "type": "double",
+      "doc": "Current price in USD"
+    },
+    {
+      "name": "volume_24h",
+      "type": "double",
+      "doc": "24-hour trading volume in USD"
+    },
+    {
+      "name": "price_change_24h_pct",
+      "type": "double",
+      "doc": "24-hour price change percentage"
+    },
+    {
+      "name": "market_cap",
+      "type": "double",
+      "doc": "Market capitalization in USD"
+    },
+    {
+      "name": "timestamp",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Price timestamp in milliseconds"
+    }
+  ]
+}
+

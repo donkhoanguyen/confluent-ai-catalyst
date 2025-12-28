@@ -1,0 +1,617 @@
+"""
+LangGraph-based orchestrator for autonomous causal discovery agent.
+"""
+
+from typing import Annotated, Literal, TypedDict, Dict, Optional
+from datetime import datetime
+from operator import add
+import json
+
+from loguru import logger
+
+try:
+    from langgraph.graph import StateGraph, END
+    from langgraph.graph.message import add_messages
+    from langgraph.checkpoint.memory import MemorySaver
+    LANGGRAPH_AVAILABLE = True
+except ImportError:
+    LANGGRAPH_AVAILABLE = False
+    logger.warning("langgraph not available - using simplified orchestrator")
+
+from .models import (
+    DiscoveryState,
+    Hypothesis,
+    CausalResult,
+    Variable,
+    DataSource,
+    CausalMethod,
+)
+from .domain import DomainRegistry, VariableRegistry
+try:
+    from .hypothesis_generator import HypothesisGenerator
+    from .data_discovery import DataSourceDiscovery
+    from .confounder_discovery import ConfounderDiscovery
+    AGENT_MODULES_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Agent modules not fully available: {e}")
+    AGENT_MODULES_AVAILABLE = False
+from config.settings import Settings, get_settings
+
+
+def merge_dicts(a: dict, b: dict) -> dict:
+    """Merge two dictionaries, with b taking precedence."""
+    return {**a, **b}
+
+
+class AgentState(TypedDict):
+    """State for the LangGraph agent."""
+    domain: str
+    query: str
+    hypotheses: Annotated[list[Hypothesis], add]
+    results: Annotated[list[CausalResult], add]
+    active_data_sources: Annotated[list[DataSource], add]
+    discovered_variables: Annotated[list[Variable], add]
+    iteration: int
+    status: str
+    error: Optional[str]
+    metadata: Annotated[dict, merge_dicts]
+    messages: Annotated[list, add_messages]
+
+
+class CausalDiscoveryAgent:
+    """
+    Autonomous causal discovery agent using LangGraph.
+    
+    The agent operates in a discovery loop:
+    1. Generate hypotheses using Gemini
+    2. Discover data sources for variables
+    3. Integrate data sources via Confluent
+    4. Collect data
+    5. Run causal inference tests
+    6. Discover and test confounders
+    7. Refine hypotheses based on results
+    """
+    
+    def __init__(self, settings: Settings = None):
+        self.settings = settings or get_settings()
+        if AGENT_MODULES_AVAILABLE:
+            self.hypothesis_generator = HypothesisGenerator(self.settings)
+            self.data_discovery = DataSourceDiscovery(self.settings)
+            self.confounder_discovery = ConfounderDiscovery(self.settings)
+        else:
+            self.hypothesis_generator = None
+            self.data_discovery = None
+            self.confounder_discovery = None
+        self.variable_registry = VariableRegistry()
+        self.domain_registry: Dict[str, DomainRegistry] = {}
+        
+        # Build LangGraph
+        self.graph = self._build_graph()
+        if self.graph and LANGGRAPH_AVAILABLE:
+            self.checkpointer = MemorySaver()
+            self.app = self.graph.compile(checkpointer=self.checkpointer)
+        else:
+            self.app = None
+    
+    def _build_graph(self):
+        """Build the LangGraph state graph."""
+        if not LANGGRAPH_AVAILABLE:
+            # Fallback to simple sequential execution
+            return None
+        
+        workflow = StateGraph(AgentState)
+        
+        # Add nodes
+        workflow.add_node("generate_hypotheses", self._generate_hypotheses_node)
+        workflow.add_node("discover_data_sources", self._discover_data_sources_node)
+        workflow.add_node("integrate_pipelines", self._integrate_pipelines_node)
+        workflow.add_node("collect_data", self._collect_data_node)
+        workflow.add_node("run_causal_tests", self._run_causal_tests_node)
+        workflow.add_node("discover_confounders", self._discover_confounders_node)
+        workflow.add_node("test_confounders", self._test_confounders_node)
+        workflow.add_node("refine_hypotheses", self._refine_hypotheses_node)
+        workflow.add_node("evaluate_results", self._evaluate_results_node)
+        
+        # Define edges
+        workflow.set_entry_point("generate_hypotheses")
+        
+        workflow.add_edge("generate_hypotheses", "discover_data_sources")
+        workflow.add_edge("discover_data_sources", "integrate_pipelines")
+        workflow.add_edge("integrate_pipelines", "collect_data")
+        workflow.add_edge("collect_data", "run_causal_tests")
+        workflow.add_edge("run_causal_tests", "discover_confounders")
+        workflow.add_edge("discover_confounders", "test_confounders")
+        workflow.add_edge("test_confounders", "refine_hypotheses")
+        
+        # Conditional edge: refine or end
+        workflow.add_conditional_edges(
+            "refine_hypotheses",
+            self._should_continue,
+            {
+                "continue": "evaluate_results",
+                "end": END,
+            }
+        )
+        
+        workflow.add_conditional_edges(
+            "evaluate_results",
+            self._should_refine,
+            {
+                "refine": "generate_hypotheses",
+                "end": END,
+            }
+        )
+        
+        return workflow
+    
+    def _generate_hypotheses_node(self, state: AgentState) -> dict:
+        """Generate causal hypotheses using Gemini."""
+        logger.info(f"Generating hypotheses for domain: {state['domain']}")
+        
+        try:
+            if not self.hypothesis_generator:
+                raise RuntimeError("Hypothesis generator not available")
+            hypotheses = self.hypothesis_generator.generate(
+                domain=state["domain"],
+                query=state["query"],
+            )
+            
+            # Register variables from hypotheses
+            new_variables = []
+            for hyp in hypotheses:
+                self.variable_registry.register(hyp.cause)
+                self.variable_registry.register(hyp.effect)
+                new_variables.extend([hyp.cause, hyp.effect])
+            
+            logger.info(f"Generated {len(hypotheses)} hypotheses")
+            
+            return {
+                "hypotheses": hypotheses,
+                "discovered_variables": new_variables,
+                "status": "HYPOTHESIS_GENERATION",
+                "metadata": {"hypothesis_count": len(hypotheses)},
+            }
+            
+        except Exception as e:
+            logger.error(f"Error generating hypotheses: {e}")
+            return {
+                "error": str(e),
+                "status": "ERROR",
+            }
+    
+    def _discover_data_sources_node(self, state: AgentState) -> dict:
+        """Discover data sources for variables."""
+        logger.info("Discovering data sources")
+        
+        try:
+            all_sources = []
+            
+            if not self.data_discovery:
+                raise RuntimeError("Data discovery not available")
+            for hypothesis in state["hypotheses"]:
+                # Discover sources for cause and effect
+                cause_sources = self.data_discovery.discover_sources(
+                    variable=hypothesis.cause,
+                    domain=state["domain"],
+                )
+                effect_sources = self.data_discovery.discover_sources(
+                    variable=hypothesis.effect,
+                    domain=state["domain"],
+                )
+                
+                all_sources.extend(cause_sources)
+                all_sources.extend(effect_sources)
+                
+                # Add to hypothesis
+                hypothesis.required_data_sources = list(set(cause_sources + effect_sources))
+            
+            unique_sources = list(set(all_sources))
+            logger.info(f"Discovered {len(unique_sources)} data sources")
+            
+            return {
+                "active_data_sources": unique_sources,
+                "status": "DATA_DISCOVERY",
+                "metadata": {"data_source_count": len(unique_sources)},
+            }
+            
+        except Exception as e:
+            logger.error(f"Error discovering data sources: {e}")
+            return {
+                "error": str(e),
+                "status": "ERROR",
+            }
+    
+    def _integrate_pipelines_node(self, state: AgentState) -> dict:
+        """Integrate data sources via Confluent (MCP or Admin API)."""
+        logger.info("Integrating pipelines via Confluent")
+        
+        try:
+            try:
+                from agent.confluent_client import ConfluentClient
+            except ImportError:
+                from .confluent_client import ConfluentClient
+            
+            client = ConfluentClient(self.settings)
+            
+            for source in state["active_data_sources"]:
+                # Create Kafka topic
+                topic = client.create_topic_for_source(source)
+                source.kafka_topic = topic
+                
+                # Register schema
+                try:
+                    from agent.domain import SchemaTemplate
+                except ImportError:
+                    from .domain import SchemaTemplate
+                schema = SchemaTemplate.for_data_source(source)
+                client.register_schema(source, schema)
+                
+                logger.info(f"Integrated source: {source.name} -> topic: {topic}")
+            
+            return {
+                "status": "PIPELINE_INTEGRATION",
+                "metadata": {"pipelines_created": len(state["active_data_sources"])},
+            }
+            
+        except Exception as e:
+            logger.error(f"Error integrating pipelines: {e}")
+            return {
+                "error": str(e),
+                "status": "ERROR",
+            }
+    
+    def _collect_data_node(self, state: AgentState) -> dict:
+        """Collect data from integrated sources."""
+        logger.info("Collecting data from sources")
+        
+        try:
+            import sys
+            import os
+            # Add parent directory to path to import producers module
+            parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            if parent_dir not in sys.path:
+                sys.path.insert(0, parent_dir)
+            from producers.factory import ProducerFactory
+            
+            factory = ProducerFactory(self.settings)
+            
+            for source in state["active_data_sources"]:
+                producer = factory.create_producer(source)
+                # Start producer in background (in real implementation)
+                logger.info(f"Started producer for: {source.name}")
+            
+            # Wait for data collection (in real implementation, this would be async)
+            return {
+                "status": "DATA_COLLECTION",
+                "metadata": {"data_collected": True},
+            }
+            
+        except Exception as e:
+            logger.error(f"Error collecting data: {e}")
+            return {
+                "error": str(e),
+                "status": "ERROR",
+            }
+    
+    def _run_causal_tests_node(self, state: AgentState) -> dict:
+        """Run causal inference tests on hypotheses."""
+        logger.info("Running causal inference tests")
+        
+        try:
+            try:
+                from causal.registry import CausalEngineRegistry
+            except ImportError:
+                from .causal.registry import CausalEngineRegistry
+            
+            registry = CausalEngineRegistry()
+            results = []
+            
+            for hypothesis in state["hypotheses"]:
+                # Try each suggested method
+                for method in hypothesis.suggested_methods:
+                    try:
+                        engine = registry.get_engine(method)
+                        if not engine:
+                            logger.warning(f"Engine not available for method: {method.value}")
+                            continue
+                        result = engine.test(
+                            cause=hypothesis.cause,
+                            effect=hypothesis.effect,
+                            data_sources=hypothesis.required_data_sources,
+                        )
+                        results.append(result)
+                        logger.info(f"Tested {hypothesis.cause.name} -> {hypothesis.effect.name} using {method.value}")
+                    except Exception as e:
+                        logger.warning(f"Method {method.value} failed: {e}")
+                        continue
+            
+            return {
+                "results": results,
+                "status": "CAUSAL_TESTING",
+                "metadata": {"tests_run": len(results)},
+            }
+            
+        except Exception as e:
+            logger.error(f"Error running causal tests: {e}")
+            return {
+                "error": str(e),
+                "status": "ERROR",
+            }
+    
+    def _discover_confounders_node(self, state: AgentState) -> dict:
+        """Discover potential confounding factors."""
+        logger.info("Discovering confounding factors")
+        
+        try:
+            if not self.confounder_discovery:
+                raise RuntimeError("Confounder discovery not available")
+            
+            new_variables = []
+            total_confounders = 0
+            
+            for hypothesis in state["hypotheses"]:
+                confounders = self.confounder_discovery.discover(
+                    hypothesis=hypothesis,
+                    domain=state["domain"],
+                )
+                hypothesis.potential_confounders = confounders
+                total_confounders += len(confounders)
+                
+                # Register confounder variables
+                for conf in confounders:
+                    self.variable_registry.register(conf)
+                    new_variables.append(conf)
+            
+            return {
+                "discovered_variables": new_variables,
+                "status": "CONFOUNDER_DISCOVERY",
+                "metadata": {"confounders_discovered": total_confounders},
+            }
+            
+        except Exception as e:
+            logger.error(f"Error discovering confounders: {e}")
+            return {
+                "error": str(e),
+                "status": "ERROR",
+            }
+    
+    def _test_confounders_node(self, state: AgentState) -> dict:
+        """Test for confounding effects."""
+        logger.info("Testing confounding factors")
+        
+        try:
+            try:
+                from causal.confounder_test import ConfounderTester
+            except ImportError:
+                from .causal.confounder_test import ConfounderTester
+            
+            tester = ConfounderTester()
+            
+            for result in state["results"]:
+                hypothesis = result.hypothesis
+                if hypothesis.potential_confounders:
+                    confounders_tested = tester.test_confounders(
+                        hypothesis=hypothesis,
+                        confounders=hypothesis.potential_confounders,
+                    )
+                    result.confounders_tested = confounders_tested
+                    result.confounders_significant = [
+                        c for c in confounders_tested if tester.is_confounding(c)
+                    ]
+            
+            return {"status": "CONFOUNDER_TESTING"}
+            
+        except Exception as e:
+            logger.error(f"Error testing confounders: {e}")
+            return {
+                "error": str(e),
+                "status": "ERROR",
+            }
+    
+    def _refine_hypotheses_node(self, state: AgentState) -> dict:
+        """Refine hypotheses based on results."""
+        logger.info("Refining hypotheses")
+        
+        try:
+            if not self.hypothesis_generator:
+                raise RuntimeError("Hypothesis generator not available")
+            # Use Gemini to analyze results and suggest refinements
+            refined = self.hypothesis_generator.refine(
+                hypotheses=state["hypotheses"],
+                results=state["results"],
+                domain=state["domain"],
+            )
+            
+            return {
+                "hypotheses": refined,
+                "iteration": state["iteration"] + 1,
+                "status": "REFINING",
+            }
+            
+        except Exception as e:
+            logger.error(f"Error refining hypotheses: {e}")
+            return {
+                "error": str(e),
+                "status": "ERROR",
+            }
+    
+    def _evaluate_results_node(self, state: AgentState) -> dict:
+        """Evaluate results and decide next steps."""
+        logger.info("Evaluating results")
+        
+        # Check if we have significant results
+        significant_results = [r for r in state["results"] if r.is_significant]
+        
+        if significant_results:
+            return {
+                "status": "COMPLETE",
+                "metadata": {"significant_results": len(significant_results)},
+            }
+        else:
+            return {
+                "status": "EVALUATING",
+                "metadata": {"no_significant_results": True},
+            }
+    
+    def _should_continue(self, state: AgentState) -> Literal["continue", "end"]:
+        """Decide if we should continue or end."""
+        if state.get("error"):
+            return "end"
+        
+        if state["iteration"] >= 3:  # Max iterations
+            return "end"
+        
+        return "continue"
+    
+    def _should_refine(self, state: AgentState) -> Literal["refine", "end"]:
+        """Decide if we should refine hypotheses or end."""
+        if state.get("error"):
+            return "end"
+        
+        if state["status"] == "COMPLETE":
+            return "end"
+        
+        if state["iteration"] >= 3:
+            return "end"
+        
+        # If no significant results, try refining
+        significant = [r for r in state["results"] if r.is_significant]
+        if not significant and state["iteration"] < 3:
+            return "refine"
+        
+        return "end"
+    
+    def discover(self, domain: str, query: str, config: dict = None) -> DiscoveryState:
+        """
+        Start the causal discovery process.
+        
+        Args:
+            domain: Domain name (e.g., "cryptocurrency")
+            query: User query about causal relationships
+            config: Optional configuration for the discovery
+            
+        Returns:
+            DiscoveryState with results
+        """
+        initial_state: AgentState = {
+            "domain": domain,
+            "query": query,
+            "hypotheses": [],
+            "results": [],
+            "active_data_sources": [],
+            "discovered_variables": [],
+            "iteration": 0,
+            "status": "INITIALIZING",
+            "error": None,
+            "metadata": {},
+            "messages": [],
+        }
+
+        def apply_update(current: dict, update: dict) -> dict:
+            """Apply partial state updates while preserving initial keys."""
+            result = dict(current)
+            for key, value in update.items():
+                if key == "metadata":
+                    result[key] = {**result.get(key, {}), **value}
+                elif key in ("hypotheses", "results", "active_data_sources", "discovered_variables"):
+                    result[key] = result.get(key, []) + value
+                else:
+                    result[key] = value
+            return result
+        
+        config = config or {}
+        thread_id = config.get("thread_id", f"discovery_{datetime.utcnow().timestamp()}")
+        
+        # Run the graph
+        final_state = None
+        merged_state = dict(initial_state)
+        if self.app and LANGGRAPH_AVAILABLE:
+            for update in self.app.stream(initial_state, config={"configurable": {"thread_id": thread_id}}):
+                if isinstance(update, dict):
+                    merged_state = apply_update(merged_state, update)
+                else:
+                    merged_state = update
+                final_state = merged_state
+                logger.debug(f"State update: {update}")
+        else:
+            # Fallback: sequential execution
+            final_state = self._run_sequential(initial_state)
+        
+        # Convert to DiscoveryState
+        if final_state:
+            last_state = final_state if isinstance(final_state, dict) else final_state
+            return DiscoveryState(
+                domain=last_state.get("domain", domain),
+                query=last_state.get("query", query),
+                hypotheses=last_state.get("hypotheses", []),
+                results=last_state.get("results", []),
+                active_data_sources=last_state.get("active_data_sources", []),
+                discovered_variables=last_state.get("discovered_variables", []),
+                iteration=last_state.get("iteration", 0),
+                status=last_state.get("status", "ERROR"),
+                error=last_state.get("error"),
+                metadata=last_state.get("metadata", {}),
+            )
+        
+        return DiscoveryState(domain=domain, query=query, status="ERROR", error="No state returned")
+    
+    def _run_sequential(self, initial_state: AgentState) -> AgentState:
+        """Fallback sequential execution if LangGraph not available."""
+        state = dict(initial_state)
+        
+        def apply_update(current: dict, update: dict) -> dict:
+            """Apply partial state update, handling list concatenation and dict merging."""
+            result = dict(current)
+            for key, value in update.items():
+                if key == "metadata":
+                    result[key] = {**result.get(key, {}), **value}
+                elif key in ("hypotheses", "results", "active_data_sources", "discovered_variables"):
+                    result[key] = result.get(key, []) + value
+                else:
+                    result[key] = value
+            return result
+        
+        # Run nodes sequentially
+        update = self._generate_hypotheses_node(state)
+        state = apply_update(state, update)
+        if state.get("error"):
+            return state
+        
+        update = self._discover_data_sources_node(state)
+        state = apply_update(state, update)
+        if state.get("error"):
+            return state
+        
+        update = self._integrate_pipelines_node(state)
+        state = apply_update(state, update)
+        if state.get("error"):
+            return state
+        
+        update = self._collect_data_node(state)
+        state = apply_update(state, update)
+        if state.get("error"):
+            return state
+        
+        update = self._run_causal_tests_node(state)
+        state = apply_update(state, update)
+        if state.get("error"):
+            return state
+        
+        update = self._discover_confounders_node(state)
+        state = apply_update(state, update)
+        if state.get("error"):
+            return state
+        
+        update = self._test_confounders_node(state)
+        state = apply_update(state, update)
+        if state.get("error"):
+            return state
+        
+        update = self._refine_hypotheses_node(state)
+        state = apply_update(state, update)
+        
+        update = self._evaluate_results_node(state)
+        state = apply_update(state, update)
+        
+        return state
+

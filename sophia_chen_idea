@@ -1,0 +1,128 @@
+Building a Causal Inference Application with Google Antigravity and Streamlit
+A Journey from “AI-First” to “Agent-First”
+Sophia Chen, PhD
+Sophia Chen, PhD
+
+Follow
+9 min read
+·
+4 days ago
+23
+
+
+
+
+
+
+Press enter or click to view image in full size
+
+Image generated using Gemini 3.0
+I’ve been on my career break for 8 months. During the first 3 months, I thoroughly explored Generative AI tools to identify potential use cases for my professional and personal life, ranging from chatbots and “vibe coding” to various agentic applications. I summarized my initial learning framework and resources in this article back in July.
+
+To prepare for Data Science interviews, I adopted an “AI-first” mindset. I used Gen AI to “vibe code” projects like a SQL Quiz Generator incorporating business context and an LTV model for a subscription SaaS product. It was frustrating that despite performing well in most interviews, I didn’t receive any job offers. Following the rejections, I came up with an “innovative” self-promotion idea: a paper titled “Productize Myself in Six Months (no-ads)” to showcase my qualifications to potential employers. This also proved unsuccessful. Consequently, after launching my Pu’er Tea business in China in October, I returned to conventional applications and interviews.
+
+I was interviewing with several small and medium-sized companies through cold applications or recruiter outreach. While these companies might not represent the entire industry, two of them actively encouraged the use of AI assistance during the technical interview. This was a huge relief for me, as I hadn’t coded regularly for a while and now primarily rely on “vibe coding” for simple analytics tasks. This acceptance of AI tools could signal an emerging trend for DS interviews. The ability to simply write queries is becoming less of a unique strength to evaluate a candidate; instead, the ability to define problems from ambiguity and select the appropriate analytical approach is becoming more critical.
+
+I was quite disappointed that none of these interviews resulted in official job offers. So, I turned to the traditional method: a referral. My most recent interview opportunity is with my previous company, Intuit, referred by a friend there. The role focuses on causal inference and advanced analytics to improve decision quality. Although I’m usually reluctant to spend time solely preparing for interviews, I am treating this as an opportunity to deepen my econometrics/statistics knowledge and sharpen my AI application skills for this specific purpose.
+
+Shifting to an “Agent-First” Mindset
+The AI landscape has evolved rapidly in the second half of 2025, with new AI feature launches and breakthroughs in infrastructure and foundation models occurring almost every week. Google Antigravity, a newly launched agentic development platform, caught my attention recently, though I haven’t yet found a perfect use case for myself. With the daily influx of different types of agents on social media, my mindset has shifted from “AI-first” to “agent-first”: I wanted to build a causal inference agent, even though I had no idea what it might look like initially.
+
+To get started, I prompted in the Gemini chatbot:
+
+“I want to build a causal inference AI agent to automate causal inference tasks to evaluate metrics impact, using a B2B SaaS product as an example. Can you write a project plan and build a prototype tool using Python?”
+
+The suggested project plan made sense, especially for building something scalable end-to-end in a business environment. It clearly outlined steps, objectives, key tasks, and deliverables along with timelines.
+
+Press enter or click to view image in full size
+
+Press enter or click to view image in full size
+
+Press enter or click to view image in full size
+
+Additionally, Gemini provided prototype scripts in Python covering the core elements of causal inference analysis — such as model specification, identification, estimation, and robustness checks — all leveraging a simulated dataset.
+
+The prototype script was a great starting point, as I wanted to build a quick proof-of-concept for this side project. I followed up with the prompt:
+
+“Can you please create a frontend UI that wraps up each step in the prototype, with options to select methods and parameters?”
+
+Gemini recommended Streamlit, a tool I was hearing about for the first time, to build a Python-based interactive web application. To further streamline the implementation, I asked if I could use Google Antigravity to do the job, and received a “Yes” with step-by-step instructions. Hence, I switched to Antigravity to develop and deploy the causal inference application. Since I was new to this vibe coding IDE, I had no idea where to start. However, the beauty of vibe coding is that I can simply ask the Agent Manager to complete tasks for me, such as creating a new workspace for the project— the very first step in app development.
+
+The initial version provided by Antigravity, based on my high-level product requirements, already exceeded my expectations. I would estimate a workload of two weeks given my minimal experience in app development without AI assistance; now, it took me less than an hour to get something up and running.
+
+Refining the Tool: The Causal Inference Application
+To make the tool truly useful, I needed to apply my expertise in theoretical econometrics and empirical data analysis to make each step straightforward while validating the accuracy of the results. Through many conversational iterations, I finally launched the MVP on Streamlit! It consists of three main tabs:
+
+User Guide: Step-by-step instructions to apply the tool.
+Exploratory Analysis: Data preprocessing, data summary, and visualization functions.
+Causal Analysis: Configurations for estimation method and model specifications, and detailed model output.
+The application is intentionally designed to not be fully autonomous, as causal inference requires domain expertise in econometrics and statistics. Therefore, it is always recommended to use the tool with at least basic knowledge of causal inference to avoid misusing the methods and misinterpreting the results. In the future, I may explore ways to enhance it to be more autonomous, given that the ultimate goal is to make it a true AI agent.
+
+Case Study Walkthrough
+Now, I’m going to demonstrate the application using a simulated dataset of 1,000 account-level rows with variables such as account_value, conversion, feature_adoption, and customer_segment.
+
+Exploratory Data Analysis
+
+A quick data summary can be viewed on the “Exploratory Analysis” tab. The tool also builds in common data preprocessing procedures such as missing imputation, outlier treatment, log/standard transformations, bucketing, and customized filters. My simulated dataset is fairly clean, so I don’t need to apply these additional processing steps for simplicity.
+
+Press enter or click to view image in full size
+
+Press enter or click to view image in full size
+
+Press enter or click to view image in full size
+
+Assume we want to estimate the causal impact of feature adoption on account value. We can see from the visualization that feature adoption has a positive correlation with account value on average. Looking at the histogram of account value by individual accounts, it’s clear that accounts with feature adoption are scattered to the right of the distribution. Interestingly, some accounts without feature adoption are in the middle range of account value, indicating other factors are influencing account value aside from feature adoption. These other factors are called “confounders” and should be controlled to estimate an unbiased causal impact.
+
+Press enter or click to view image in full size
+
+Press enter or click to view image in full size
+
+Identification & Model Specification
+
+We need to identify all possible confounders when specifying the causal model. Essentially, we want to identify variables that correlate with both feature adoption (treatment) and account value (outcome), which can often be done through a correlation matrix. However, it is vital to apply economic intuition when specifying a causal relationship inferred from correlations.
+
+From the correlation matrix and bar charts, we can see that besides feature_adoption, customer_segment and historical_usage are also highly correlated with account_value. These two variables align with economic intuition and will be considered key confounders in the causal estimation.
+
+Press enter or click to view image in full size
+
+Press enter or click to view image in full size
+
+Press enter or click to view image in full size
+
+Running the Analysis
+
+Moving to the third tab, “Causal Analysis,” we quantify the impact with the following key steps:
+
+Configuration:
+Variables: Treatment, Outcome, and Confounders are essential inputs.
+Estimation Method: I included a variety of parametric and non-parametric estimation methods. In this example, I picked the simplest OLS regression, as the outcome variable is continuous. The list also includes ML approaches to capture non-linear relationships. For binary outcomes, the tool automatically handles switching to logistic regression and ML classifiers.
+Press enter or click to view image in full size
+
+Bootstrapping: We need to compute standard errors to estimate the confidence interval of the causal estimate; bootstrapping is a generic method enabled here for this purpose.
+Press enter or click to view image in full size
+
+2. Output Generation:
+
+Once we hit “Run Causal Analysis,” the tool automatically produces:
+
+Model Specification and Identification: These steps hypothesize the causal relationship while controlling for potential confounders.
+Press enter or click to view image in full size
+
+Model Estimation and Interpretation: I applied OLS with feature_adoption (x1) as treatment, and customer_segment (x2) and historical_usage (x3) as confounders. Since it is a parametric model, the tool outputs estimated parameters with confidence intervals. In this example, the result is interpreted as: on average, feature adoption increases account value by $499.41, accounting for customer segment and historical usage. The tool also conducts Heterogeneity Analysis to assess if the treatment effect varies across different segments. In my example, after controlling for customer_segment and historical_usage, HTE is not statistically significant in these two dimensions. However, it shows statistically significant effect in another variable, quarter, which is a pre/post time period indicator. It implies that the model may have an omitted variable to capture the fixed time effect.
+Press enter or click to view image in full size
+
+Press enter or click to view image in full size
+
+Robustness Check: To evaluate the stability of the estimated causal effect, the app implements two methods:
+a. Random Common Cause: Checks if adding a random confounder changes the estimate. If the new effect is close to the original, the estimate is considered stable.
+
+b. Placebo Treatment: Checks if replacing the treatment with a random placebo yields an effect close to zero.
+
+Press enter or click to view image in full size
+
+Lastly, I can download the data with results and the Python script for further analysis.
+
+Press enter or click to view image in full size
+
+Final Thoughts
+Building the Causal Inference Application with an AI coding agent demonstrated the shift from an “AI-first” to an “agent-first” mindset. AI coding agents like Google Antigravity dramatically accelerate 0–1 development, but deep domain expertise is still crucial for accuracy and relevance. The true power lies not just in the code the agent generates, but in the human insight that guides its logic and interprets its output. This project, created during my career break, exemplifies resilience — leveraging cutting-edge AI and rigorous econometrics to build something new. This fusion is the skillset I am excited to bring to my next role.

@@ -1,0 +1,101 @@
+{
+  "type": "record",
+  "name": "RedditPostEnriched",
+  "namespace": "com.cryptosentinel.social",
+  "doc": "Reddit post enriched with Gemini sentiment analysis",
+  "fields": [
+    {
+      "name": "post_id",
+      "type": "string",
+      "doc": "Unique Reddit post identifier"
+    },
+    {
+      "name": "subreddit",
+      "type": "string",
+      "doc": "Source subreddit name"
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "doc": "Post title"
+    },
+    {
+      "name": "body",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Post body text (selftext)"
+    },
+    {
+      "name": "score",
+      "type": "int",
+      "doc": "Upvotes minus downvotes"
+    },
+    {
+      "name": "num_comments",
+      "type": "int",
+      "doc": "Number of comments"
+    },
+    {
+      "name": "author",
+      "type": "string",
+      "doc": "Post author username"
+    },
+    {
+      "name": "url",
+      "type": "string",
+      "doc": "Post URL"
+    },
+    {
+      "name": "created_utc",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Post creation timestamp in milliseconds"
+    },
+    {
+      "name": "sentiment_score",
+      "type": "double",
+      "doc": "Sentiment score from -1.0 (bearish) to 1.0 (bullish)"
+    },
+    {
+      "name": "sentiment_label",
+      "type": {
+        "type": "enum",
+        "name": "SentimentLabel",
+        "symbols": ["POSITIVE", "NEGATIVE", "NEUTRAL"]
+      },
+      "doc": "Categorical sentiment label"
+    },
+    {
+      "name": "sentiment_confidence",
+      "type": "double",
+      "doc": "Confidence score from 0.0 to 1.0"
+    },
+    {
+      "name": "mentioned_coins",
+      "type": {
+        "type": "array",
+        "items": "string"
+      },
+      "doc": "List of cryptocurrency symbols mentioned (BTC, ETH, etc.)"
+    },
+    {
+      "name": "topics",
+      "type": {
+        "type": "array",
+        "items": "string"
+      },
+      "doc": "Extracted topics (price, adoption, regulation, etc.)"
+    },
+    {
+      "name": "processed_at",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Timestamp when sentiment was extracted"
+    }
+  ]
+}
+

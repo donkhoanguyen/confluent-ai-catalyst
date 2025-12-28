@@ -1,0 +1,82 @@
+{
+  "type": "record",
+  "name": "CausalResult",
+  "namespace": "com.cryptosentinel.analytics",
+  "doc": "Result of causal analysis between sentiment and price",
+  "fields": [
+    {
+      "name": "coin_id",
+      "type": "string",
+      "doc": "Coin identifier"
+    },
+    {
+      "name": "window_start",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Analysis window start time"
+    },
+    {
+      "name": "window_end",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Analysis window end time"
+    },
+    {
+      "name": "direction",
+      "type": {
+        "type": "enum",
+        "name": "CausalDirection",
+        "symbols": ["SENTIMENT_LEADS", "PRICE_LEADS", "BIDIRECTIONAL", "NO_CAUSALITY"]
+      },
+      "doc": "Direction of causal relationship"
+    },
+    {
+      "name": "lead_lag_minutes",
+      "type": "int",
+      "doc": "Lead/lag time in minutes (positive = sentiment leads)"
+    },
+    {
+      "name": "confidence",
+      "type": "double",
+      "doc": "Confidence score from 0.0 to 1.0"
+    },
+    {
+      "name": "sentiment_to_price_pval",
+      "type": "double",
+      "doc": "P-value for sentiment -> price Granger test"
+    },
+    {
+      "name": "sentiment_to_price_fstat",
+      "type": "double",
+      "doc": "F-statistic for sentiment -> price Granger test"
+    },
+    {
+      "name": "price_to_sentiment_pval",
+      "type": "double",
+      "doc": "P-value for price -> sentiment Granger test"
+    },
+    {
+      "name": "price_to_sentiment_fstat",
+      "type": "double",
+      "doc": "F-statistic for price -> sentiment Granger test"
+    },
+    {
+      "name": "sample_size",
+      "type": "int",
+      "doc": "Number of data points in analysis window"
+    },
+    {
+      "name": "computed_at",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Timestamp when analysis was computed"
+    }
+  ]
+}
+
