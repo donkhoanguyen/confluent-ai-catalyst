@@ -2,8 +2,13 @@
 """
 Example script showing how to use the Autonomous Causal Discovery Agent.
 
+This script demonstrates the agent using unified_market_data.csv (unified schema).
+
 Run this after setting up your .env file:
     python example_agent_usage.py [--offline]
+
+Note: For offline mode, make sure unified_market_data.csv exists in data/canonical/
+      (run test_unified_collector.py first to generate test data)
 """
 
 import argparse
@@ -35,9 +40,18 @@ def main():
     settings = get_settings()
     if args.offline:
         settings.offline_mode = True
-        print("🔒 Offline mode enabled (using bundled sample data).")
+        print("🔒 Offline mode enabled (using unified_market_data.csv).")
+        print("   Note: Make sure data/canonical/unified_market_data.csv exists")
+        print("   (Run test_unified_collector.py first to generate test data)")
     agent = CausalDiscoveryAgent(settings)
     print("✅ Agent initialized!")
+    
+    # Check if data was loaded
+    if args.offline and agent.offline_df is not None:
+        print(f"   📊 Loaded {len(agent.offline_df)} rows from unified CSV")
+        print(f"   📋 Available variables: {len(agent.offline_df.columns)} columns")
+    elif args.offline:
+        print("   ⚠️  No offline data loaded - CSV may be empty or missing")
     print()
 
     # Example 1: Crypto market analysis

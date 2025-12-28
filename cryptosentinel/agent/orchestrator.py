@@ -6,8 +6,20 @@ from typing import Annotated, Literal, TypedDict, Dict, Optional
 from datetime import datetime, timezone
 from operator import add
 import json
+import os
 
 from loguru import logger
+from dotenv import load_dotenv
+
+# Load .env file to ensure LangSmith environment variables are available
+# This is needed because LangChain/LangGraph reads from os.environ directly
+load_dotenv(override=True)
+
+# Ensure LANGCHAIN_API_KEY is set if LANGSMITH_API_KEY exists but LANGCHAIN_API_KEY doesn't
+# LangChain uses LANGCHAIN_API_KEY to authenticate with LangSmith
+if os.getenv("LANGSMITH_API_KEY") and not os.getenv("LANGCHAIN_API_KEY"):
+    os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGSMITH_API_KEY")
+    logger.debug("Set LANGCHAIN_API_KEY from LANGSMITH_API_KEY for LangSmith tracing")
 
 try:
     from langgraph.graph import StateGraph, END
@@ -101,11 +113,22 @@ class CausalDiscoveryAgent:
             self.app = None
     
     def _load_offline_sample_df(self):
-        """Load a bundled offline demo DataFrame if available."""
+        """Load a bundled offline demo DataFrame if available.
+        
+        Tries unified_market_data.csv first (unified table format),
+        then falls back to bitcoin_offline_demo.csv for backward compatibility.
+        """
         try:
+            # First try unified_market_data.csv (preferred)
+            df = self.dataframe_builder.load_from_csv("bitcoin")
+            if df is not None and len(df) > 0:
+                logger.info(f"Loaded {len(df)} rows from unified_market_data.csv for offline mode")
+                return df
+            
+            # Fallback to legacy offline demo file
             df = self.dataframe_builder.load_from_csv("bitcoin", suffix="offline_demo")
             if df is None:
-                logger.warning("Offline demo CSV not found; offline mode will run without data.")
+                logger.warning("No offline demo CSV found (tried unified_market_data.csv and bitcoin_offline_demo.csv); offline mode will run without data.")
             return df
         except Exception as e:
             logger.warning(f"Failed to load offline demo CSV: {e}")
@@ -549,9 +572,16 @@ class CausalDiscoveryAgent:
         """Refine hypotheses based on results."""
         logger.info("Refining hypotheses")
         
+        # In offline mode or if generator unavailable, skip refinement but increment iteration
+        if self.offline_mode or not self.hypothesis_generator:
+            logger.info("Skipping hypothesis refinement (offline mode or generator unavailable)")
+            return {
+                "hypotheses": state["hypotheses"],  # Keep existing hypotheses
+                "iteration": state["iteration"] + 1,  # CRITICAL: Always increment iteration
+                "status": "REFINING",
+            }
+        
         try:
-            if not self.hypothesis_generator:
-                raise RuntimeError("Hypothesis generator not available")
             # Use Gemini to analyze results and suggest refinements
             refined = self.hypothesis_generator.refine(
                 hypotheses=state["hypotheses"],
@@ -567,9 +597,12 @@ class CausalDiscoveryAgent:
             
         except Exception as e:
             logger.error(f"Error refining hypotheses: {e}")
+            # CRITICAL: Even on error, increment iteration to prevent infinite loop
             return {
-                "error": str(e),
-                "status": "ERROR",
+                "hypotheses": state["hypotheses"],  # Keep existing hypotheses
+                "iteration": state["iteration"] + 1,  # Increment to prevent infinite loop
+                "status": "REFINING",
+                "metadata": {"refinement_error": str(e)},
             }
     
     def _evaluate_results_node(self, state: AgentState) -> dict:
@@ -664,18 +697,29 @@ class CausalDiscoveryAgent:
             return result
         
         thread_id = config.get("thread_id", f"discovery_{datetime.now(timezone.utc).timestamp()}")
+        recursion_limit = config.get("recursion_limit", 30)  # Default 30, was 25
         
         # Run the graph
         final_state = None
         merged_state = dict(initial_state)
         if self.app and LANGGRAPH_AVAILABLE:
-            for update in self.app.stream(initial_state, config={"configurable": {"thread_id": thread_id}}):
+            stream_config = {
+                "configurable": {"thread_id": thread_id},
+                "recursion_limit": recursion_limit
+            }
+            for update in self.app.stream(initial_state, config=stream_config):
                 if isinstance(update, dict):
                     merged_state = apply_update(merged_state, update)
                 else:
                     merged_state = update
                 final_state = merged_state
                 logger.debug(f"State update: {update}")
+                
+                # Safety check: if we've hit max iterations, break early to prevent infinite loop
+                current_iteration = merged_state.get("iteration", 0)
+                if current_iteration >= 3:
+                    logger.warning(f"Reached max iterations ({current_iteration}), stopping graph execution")
+                    break
         else:
             # Fallback: sequential execution
             final_state = self._run_sequential(initial_state)
