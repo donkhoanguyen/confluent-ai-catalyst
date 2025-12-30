@@ -7,7 +7,7 @@ Loads configuration from environment variables with validation.
 from functools import lru_cache
 from typing import List, Optional
 
-from pydantic import Field, computed_field
+from pydantic import Field, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -51,16 +51,51 @@ class Settings(BaseSettings):
     )
 
     # -------------------------------------------------------------------------
-    # Google AI
+    # Google AI / Vertex AI
     # -------------------------------------------------------------------------
-    gemini_api_key: str = Field(
-        ...,
-        description="Gemini API key from AI Studio",
+    gemini_api_key: Optional[str] = Field(
+        default=None,
+        description="Gemini API key from AI Studio (used when use_vertex_ai=False or as fallback)",
+    )
+    google_application_credentials: Optional[str] = Field(
+        default=None,
+        alias="GOOGLE_APPLICATION_CREDENTIALS",
+        description="Path to a GCP service account key JSON (used by Vertex AI via ADC).",
     )
     gcp_project_id: Optional[str] = Field(
         default=None,
-        description="GCP Project ID for Vertex AI (optional)",
+        description="GCP Project ID for Vertex AI (required when use_vertex_ai=True)",
     )
+    gcp_region: str = Field(
+        default="us-central1",
+        description="GCP region for Vertex AI",
+    )
+    use_vertex_ai: bool = Field(
+        default=True,
+        description="Use Vertex AI for structured output (recommended for reliability)",
+    )
+
+    @model_validator(mode="after")
+    def _validate_llm_settings(self) -> "Settings":
+        """
+        Validate LLM configuration.
+
+        - If Vertex AI is enabled, require `gcp_project_id`.
+        - If Vertex AI is disabled, require `gemini_api_key`.
+        """
+        if self.use_vertex_ai:
+            if not self.gcp_project_id:
+                raise ValueError(
+                    "GCP_PROJECT_ID is required when USE_VERTEX_AI=true. "
+                    "Either set GCP_PROJECT_ID (and auth) or set USE_VERTEX_AI=false to use GEMINI_API_KEY."
+                )
+        else:
+            if not self.gemini_api_key:
+                raise ValueError(
+                    "GEMINI_API_KEY is required when USE_VERTEX_AI=false. "
+                    "Get one from AI Studio and set it in your .env."
+                )
+        return self
 
     # -------------------------------------------------------------------------
     # Reddit API

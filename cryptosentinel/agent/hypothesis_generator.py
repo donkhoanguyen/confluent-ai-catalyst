@@ -2,16 +2,120 @@
 Gemini-powered hypothesis generation for causal discovery.
 
 Now grounded to only use variables and data sources that exist in the system.
+Uses Vertex AI with structured output (response_schema) for reliable JSON responses.
 """
 
 import json
-from typing import List, Optional, Tuple
-from google import genai
+import os
+from typing import List, Optional, Tuple, Any, Dict
 from loguru import logger
 
 from .models import Hypothesis, Variable, VariableType, CausalMethod, CausalResult
 from .asset_registry import get_asset_registry
 from config.settings import Settings
+
+
+# -----------------------------------------------------------------------------
+# Vertex AI Response Schemas for Structured Output
+# -----------------------------------------------------------------------------
+# These schemas enforce the JSON structure returned by Gemini
+
+VARIABLE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "description": {"type": "string"},
+        "variable_type": {
+            "type": "string",
+            "enum": ["CONTINUOUS", "DISCRETE", "BINARY", "CATEGORICAL", "TIME_SERIES"]
+        },
+        "unit": {"type": "string"},
+        "domain": {"type": "string"},
+    },
+    "required": ["name", "description", "variable_type"],
+}
+
+CONFOUNDER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "description": {"type": "string"},
+        "variable_type": {
+            "type": "string",
+            "enum": ["CONTINUOUS", "DISCRETE", "BINARY", "CATEGORICAL", "TIME_SERIES"]
+        },
+        "domain": {"type": "string"},
+        "available": {"type": "boolean"},
+    },
+    "required": ["name", "available"],
+}
+
+DATA_SOURCE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "description": {"type": "string"},
+        "source_type": {
+            "type": "string",
+            "enum": ["KAFKA_TOPIC", "DATABASE", "API_REST", "FILE"]
+        },
+    },
+    "required": ["name"],
+}
+
+HYPOTHESIS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "cause": VARIABLE_SCHEMA,
+        "effect": VARIABLE_SCHEMA,
+        "mechanism": {"type": "string"},
+        "confidence": {"type": "number"},
+        "suggested_methods": {
+            "type": "array",
+            "items": {
+                "type": "string",
+                "enum": ["GRANGER", "TRANSFER_ENTROPY", "PROPENSITY_SCORE_MATCHING", 
+                         "INSTRUMENTAL_VARIABLES", "PC_ALGORITHM"]
+            }
+        },
+        "potential_confounders": {
+            "type": "array",
+            "items": CONFOUNDER_SCHEMA,
+        },
+        "required_data_sources": {
+            "type": "array",
+            "items": DATA_SOURCE_SCHEMA,
+        },
+    },
+    "required": ["cause", "effect", "mechanism", "confidence", "suggested_methods"],
+}
+
+HYPOTHESIS_GENERATION_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "hypotheses": {
+            "type": "array",
+            "items": HYPOTHESIS_SCHEMA,
+        },
+        "unavailable_variables": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["hypotheses"],
+}
+
+REFINEMENT_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "refined_hypotheses": {
+            "type": "array",
+            "items": HYPOTHESIS_SCHEMA,
+        },
+        "insights": {"type": "string"},
+    },
+    "required": ["refined_hypotheses"],
+}
 
 
 HYPOTHESIS_GENERATION_PROMPT = """
@@ -116,34 +220,143 @@ Respond with ONLY valid JSON (no markdown):
 
 
 class HypothesisGenerator:
-    """Generates causal hypotheses using Gemini, grounded to existing assets."""
+    """Generates causal hypotheses using Gemini via Vertex AI with structured output."""
     
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.client = genai.Client(api_key=settings.gemini_api_key)
-        # Use "gemini-2.5-flash" as it's more widely supported across API versions
-        # The gemini-2.5-flash model may not be available in all API versions
-        self.model_name = "gemini-2.5-flash"
         self.registry = get_asset_registry()
+
+        # Provider setup
+        self._vertex_model = None
+        self._vertex_generation_config_cls = None
+        self._vertex_generation_config = None
+        self._genai_client = None
+
+        # Use Gemini 2.0 Flash on Vertex for structured output (response_schema)
+        self.vertex_model_name = "gemini-2.0-flash-001"
+
+        # Use Gemini on AI Studio (google.genai) as a fallback (or primary if USE_VERTEX_AI=false)
+        self.genai_model_name = "gemini-2.5-flash"
+
+        if settings.use_vertex_ai:
+            # Lazy import so non-Vertex setups don't require these imports at import time
+            try:
+                import vertexai
+                from vertexai.generative_models import GenerativeModel, GenerationConfig
+            except Exception as e:
+                raise ValueError(
+                    "Vertex AI dependencies are not available. "
+                    "Install google-cloud-aiplatform / vertexai, or set USE_VERTEX_AI=false."
+                ) from e
+
+            # Settings validator already ensures project id exists when use_vertex_ai=True
+            # Prefer explicit service-account credentials if provided so we don't accidentally
+            # use a different ADC identity (e.g. your personal gcloud user).
+            creds = None
+            sa_path = settings.google_application_credentials or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+            if sa_path:
+                try:
+                    from google.oauth2 import service_account
+                    creds = service_account.Credentials.from_service_account_file(sa_path)
+                    logger.info(f"Vertex AI will use service-account credentials from GOOGLE_APPLICATION_CREDENTIALS ({sa_path})")
+                except Exception as e:
+                    raise ValueError(
+                        f"Failed to load service account credentials from GOOGLE_APPLICATION_CREDENTIALS={sa_path!r}: {e}"
+                    ) from e
+
+            vertexai.init(project=settings.gcp_project_id, location=settings.gcp_region, credentials=creds)
+            self._vertex_model = GenerativeModel(self.vertex_model_name)
+            self._vertex_generation_config_cls = GenerationConfig
+            self._vertex_generation_config = self._vertex_generation_config_cls(
+                response_mime_type="application/json",
+                response_schema=HYPOTHESIS_GENERATION_RESPONSE_SCHEMA,
+                temperature=0.7,
+            )
+
+            logger.info(
+                f"HypothesisGenerator initialized with Vertex AI "
+                f"(project={settings.gcp_project_id}, region={settings.gcp_region}, model={self.vertex_model_name})"
+            )
+
+        # Initialize AI Studio client if API key provided (for primary or fallback)
+        if settings.gemini_api_key:
+            try:
+                import google.genai as genai
+                self._genai_client = genai.Client(api_key=settings.gemini_api_key)
+                logger.info(f"HypothesisGenerator AI Studio client ready (model={self.genai_model_name})")
+            except Exception as e:
+                logger.warning(f"Failed to initialize AI Studio Gemini client: {e}")
+                self._genai_client = None
+
+        # If neither provider is ready, fail early with actionable message
+        if not self._vertex_model and not self._genai_client:
+            raise ValueError(
+                "No LLM provider configured. "
+                "Set USE_VERTEX_AI=true with GCP_PROJECT_ID (and auth) OR set USE_VERTEX_AI=false with GEMINI_API_KEY."
+            )
+
+    @staticmethod
+    def _clean_json_text(text: str) -> str:
+        text = (text or "").strip()
+        if text.startswith("```"):
+            lines = text.split("\n")
+            text = "\n".join(lines[1:-1]) if lines and lines[-1].strip() == "```" else "\n".join(lines[1:])
+            text = text.strip()
+            if text.startswith("json"):
+                text = text[4:].strip()
+        return text
+
+    def _generate_payload_vertex(self, prompt: str) -> dict:
+        if not self._vertex_model or not self._vertex_generation_config:
+            raise RuntimeError("Vertex provider not initialized")
+        response = self._vertex_model.generate_content(prompt, generation_config=self._vertex_generation_config)
+        text = self._clean_json_text(response.text)
+        return json.loads(text)
+
+    def _generate_payload_genai(self, prompt: str) -> dict:
+        if not self._genai_client:
+            raise RuntimeError("AI Studio provider not initialized")
+        response = self._genai_client.models.generate_content(
+            model=self.genai_model_name,
+            contents=prompt,
+        )
+        text = self._clean_json_text(response.text)
+        return json.loads(text)
     
-    def generate(self, domain: str, query: str, include_wish_list: bool = True) -> Tuple[List[Hypothesis], List[Hypothesis]]:
+    def generate(self, domain: str, query: str, include_wish_list: bool = True, 
+                 discovered_variables: Optional[List[Variable]] = None,
+                 active_data_sources: Optional[List] = None) -> Tuple[List[Hypothesis], List[Hypothesis]]:
         """
         Generate causal hypotheses for a domain and query.
-        Only uses variables and data sources that exist in the registry.
+        Uses discovered variables and data sources if provided, otherwise falls back to registry.
         
         Args:
-            domain: Domain name (e.g., "cryptocurrency")
+            domain: Domain name (e.g., "healthcare", "finance", "retail", "energy")
             query: Research question
             include_wish_list: If True, also return wish list hypotheses (not currently measurable)
+            discovered_variables: Optional list of variables discovered by DataCurationAgent
+            active_data_sources: Optional list of data sources discovered by DataCurationAgent
             
         Returns:
             Tuple of (testable_hypotheses, wish_list_hypotheses)
             - testable_hypotheses: Hypotheses with all variables available
             - wish_list_hypotheses: Hypotheses with unavailable variables (marked as wish_list=True)
         """
-        # Get available variables and sources for this domain
-        available_vars = self.registry.get_variables_by_domain(domain)
-        available_sources = self.registry.list_available_data_sources()
+        # Use discovered variables if provided, otherwise fall back to registry
+        if discovered_variables:
+            available_vars = discovered_variables
+            logger.info(f"Using {len(discovered_variables)} discovered variables from DataCurationAgent")
+        else:
+            available_vars = self.registry.get_variables_by_domain(domain)
+            logger.info(f"Using {len(available_vars)} variables from registry")
+        
+        # Use discovered data sources if provided, otherwise fall back to registry
+        if active_data_sources:
+            available_sources = active_data_sources
+            logger.info(f"Using {len(active_data_sources)} discovered data sources from DataCurationAgent")
+        else:
+            available_sources = self.registry.list_available_data_sources()
+            logger.info(f"Using {len(available_sources)} data sources from registry")
         
         # Format variables for prompt
         var_list = []
@@ -172,20 +385,33 @@ class HypothesisGenerator:
         )
         
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt
-            )
-            text = response.text.strip()
+            data = None
+            text = ""
+            # Primary: Vertex AI if configured
+            if self._vertex_model:
+                try:
+                    data = self._generate_payload_vertex(prompt)
+                except Exception as e:
+                    msg = str(e)
+                    # Common Vertex permission failure mode
+                    permission_denied = (
+                        "IAM_PERMISSION_DENIED" in msg
+                        or "aiplatform.endpoints.predict" in msg
+                        or "Permission" in msg and "denied" in msg.lower()
+                    )
+                    if permission_denied and self._genai_client:
+                        logger.warning(
+                            "Vertex AI prediction permission denied; falling back to AI Studio Gemini (GEMINI_API_KEY). "
+                            "To silence this, either grant `aiplatform.endpoints.predict` or set USE_VERTEX_AI=false."
+                        )
+                        data = self._generate_payload_genai(prompt)
+                    else:
+                        raise
+            else:
+                # Primary: AI Studio
+                data = self._generate_payload_genai(prompt)
             
-            # Clean JSON response
-            if text.startswith("```"):
-                lines = text.split("\n")
-                text = "\n".join(lines[1:-1]) if lines[-1] == "```" else "\n".join(lines[1:])
-                if text.startswith("json"):
-                    text = text[4:].strip()
-            
-            data = json.loads(text)
+            logger.debug(f"Vertex AI returned {len(data.get('hypotheses', []))} hypotheses")
             hypotheses = []
             wish_list_hypotheses = []  # Hypotheses with unavailable variables
             unavailable_vars = data.get("unavailable_variables", [])
@@ -360,7 +586,8 @@ class HypothesisGenerator:
             
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse Gemini response: {e}")
-            logger.debug(f"Response text: {text[:500]}")
+            if "text" in locals():
+                logger.debug(f"Response text: {str(text)[:500]}")
             return [], []
         except Exception as e:
             logger.error(f"Error generating hypotheses: {e}")
@@ -408,21 +635,37 @@ class HypothesisGenerator:
         )
         
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt
-            )
-            text = response.text.strip()
-            
-            # Clean JSON
-            if text.startswith("```"):
-                lines = text.split("\n")
-                text = "\n".join(lines[1:-1]) if lines[-1] == "```" else "\n".join(lines[1:])
-                if text.startswith("json"):
-                    text = text[4:].strip()
-            
-            data = json.loads(text)
+            data = None
+            # Prefer Vertex if configured
+            if self._vertex_model:
+                try:
+                    # Use structured output for refinement
+                    cfg = self._vertex_generation_config_cls(
+                        response_mime_type="application/json",
+                        response_schema=REFINEMENT_RESPONSE_SCHEMA,
+                        temperature=0.5,
+                    )
+                    response = self._vertex_model.generate_content(prompt, generation_config=cfg)
+                    text = self._clean_json_text(response.text)
+                    data = json.loads(text)
+                except Exception as e:
+                    msg = str(e)
+                    permission_denied = (
+                        "IAM_PERMISSION_DENIED" in msg
+                        or "aiplatform.endpoints.predict" in msg
+                        or "Permission" in msg and "denied" in msg.lower()
+                    )
+                    if permission_denied and self._genai_client:
+                        logger.warning("Vertex AI permission denied during refinement; falling back to AI Studio Gemini.")
+                        data = self._generate_payload_genai(prompt)
+                    else:
+                        raise
+            else:
+                data = self._generate_payload_genai(prompt)
             refined = []
+            
+            if data.get("insights"):
+                logger.info(f"Refinement insights: {data['insights']}")
             
             # Parse refined hypotheses (similar to generate method)
             for hyp_data in data.get("refined_hypotheses", []):
@@ -463,4 +706,3 @@ class HypothesisGenerator:
         except Exception as e:
             logger.error(f"Error refining hypotheses: {e}")
             return hypotheses  # Fallback to original
-

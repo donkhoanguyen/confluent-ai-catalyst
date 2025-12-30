@@ -14,20 +14,31 @@ import plotly.graph_objects as go
 import streamlit as st
 from loguru import logger
 
-# Import agent view - try multiple import paths for robustness
-AGENT_VIEW_AVAILABLE = False
-render_agent_view = None
+# Import views - try multiple import paths for robustness
+CURATION_VIEW_AVAILABLE = False
+CAUSAL_VIEW_AVAILABLE = False
+render_curation_view = None
+render_causal_view = None
 
 try:
-    from dashboard.agent_view import render_agent_view
-    AGENT_VIEW_AVAILABLE = True
+    from dashboard.curation_view import render_curation_view
+    CURATION_VIEW_AVAILABLE = True
 except ImportError:
     try:
-        # Fallback for direct script execution
-        from agent_view import render_agent_view
-        AGENT_VIEW_AVAILABLE = True
+        from curation_view import render_curation_view
+        CURATION_VIEW_AVAILABLE = True
     except ImportError as e:
-        logger.warning(f"Agent view not available: {e}")
+        logger.warning(f"Curation view not available: {e}")
+
+try:
+    from dashboard.agent_view import render_causal_view
+    CAUSAL_VIEW_AVAILABLE = True
+except ImportError:
+    try:
+        from agent_view import render_causal_view
+        CAUSAL_VIEW_AVAILABLE = True
+    except ImportError as e:
+        logger.warning(f"Causal view not available: {e}")
 
 # =============================================================================
 # Page Configuration
@@ -284,7 +295,7 @@ class APIClient:
 
     def __init__(self, base_url: str = "http://localhost:8000"):
         self.base_url = base_url
-        self.client = httpx.Client(timeout=10.0)
+        self.client = httpx.Client(timeout=10.0, follow_redirects=True)
 
     def get_dashboard_state(self) -> Optional[dict]:
         """Fetch complete dashboard state."""
@@ -292,24 +303,43 @@ class APIClient:
             response = self.client.get(f"{self.base_url}/api/dashboard")
             response.raise_for_status()
             return response.json()
+        except httpx.ConnectError as e:
+            logger.error(f"Connection error: Cannot connect to {self.base_url}. Is the API server running?")
+            return None
+        except httpx.TimeoutException as e:
+            logger.error(f"Timeout error: Request to {self.base_url} timed out")
+            return None
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error: {e.response.status_code} - {e.response.text}")
+            return None
         except Exception as e:
-            logger.error(f"API error: {e}")
+            logger.error(f"API error: {type(e).__name__}: {e}")
             return None
 
     def get_prices(self) -> dict:
         """Fetch current prices."""
         try:
             response = self.client.get(f"{self.base_url}/api/prices")
+            response.raise_for_status()
             return response.json()
-        except Exception:
+        except httpx.ConnectError:
+            logger.warning(f"Cannot connect to {self.base_url} for prices")
+            return {}
+        except Exception as e:
+            logger.warning(f"Error fetching prices: {e}")
             return {}
 
     def get_causal(self, coin_id: str) -> Optional[dict]:
         """Fetch causal analysis for a coin."""
         try:
             response = self.client.get(f"{self.base_url}/api/causal/{coin_id}")
+            response.raise_for_status()
             return response.json()
-        except Exception:
+        except httpx.ConnectError:
+            logger.warning(f"Cannot connect to {self.base_url} for causal data")
+            return None
+        except Exception as e:
+            logger.warning(f"Error fetching causal data: {e}")
             return None
 
 
@@ -528,24 +558,44 @@ def main():
     with st.sidebar:
         # Navigation selector at the very top - ALWAYS show
         st.markdown("## 🧭 Navigation")
-        if AGENT_VIEW_AVAILABLE:
-            page = st.selectbox(
-                "Select Page",
-                ["Dashboard", "Agent Discovery"],
-                key="page_selector",
-                label_visibility="visible"
-            )
-            st.markdown("---")
-            
-            if page == "Agent Discovery":
-                # Switch to agent view (will return, so rest won't execute)
-                render_agent_view()
-                return
-        else:
-            st.warning("⚠️ Agent Discovery not available")
-            st.info("Check terminal logs for import errors")
-            st.markdown("---")
         
+        # Build available pages list
+        pages = ["Dashboard"]
+        if CURATION_VIEW_AVAILABLE:
+            pages.append("Data Curation")
+        if CAUSAL_VIEW_AVAILABLE:
+            pages.append("Causal Inference")
+        
+        page = st.selectbox(
+            "Select Page",
+            pages,
+            key="page_selector",
+            label_visibility="visible"
+        )
+        
+        # Show warnings for unavailable views
+        if not CURATION_VIEW_AVAILABLE and not CAUSAL_VIEW_AVAILABLE:
+            st.warning("⚠️ Agent views not available")
+            st.info("Check terminal logs for import errors")
+        elif not CURATION_VIEW_AVAILABLE:
+            st.warning("⚠️ Data Curation view not available")
+        elif not CAUSAL_VIEW_AVAILABLE:
+            st.warning("⚠️ Causal Inference view not available")
+        
+        st.markdown("---")
+
+    # Handle page routing
+    if page == "Data Curation":
+        if CURATION_VIEW_AVAILABLE:
+            render_curation_view()
+        return
+    elif page == "Causal Inference":
+        if CAUSAL_VIEW_AVAILABLE:
+            render_causal_view()
+        return
+
+    # Dashboard-specific Sidebar Settings
+    with st.sidebar:
         st.markdown("## ⚙️ Settings")
 
         # Coin selector

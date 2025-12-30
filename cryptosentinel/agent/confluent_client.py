@@ -5,7 +5,7 @@ Confluent integration client supporting both MCP servers and Admin API.
 from typing import Optional, Dict, Any
 import requests
 from confluent_kafka.admin import AdminClient, NewTopic
-from confluent_kafka.schema_registry import SchemaRegistryClient
+from confluent_kafka.schema_registry import SchemaRegistryClient, Schema
 from loguru import logger
 
 from .models import DataSource, Variable
@@ -124,11 +124,12 @@ class ConfluentClient:
             # Register new schema
             import json
             schema_str = json.dumps(schema)
-            
-            schema_id = self.schema_registry.register_schema(
-                subject_name=subject_name,
-                schema=schema_str,
-            )
+
+            # NOTE: confluent_kafka Schema Registry client expects a Schema object,
+            # not a raw string. If you pass a string, it will try to call .to_dict()
+            # and fail with: "'str' object has no attribute 'to_dict'".
+            avro_schema = Schema(schema_str, schema_type="AVRO")
+            schema_id = self.schema_registry.register_schema(subject_name, avro_schema)
             
             logger.info(f"Registered schema {subject_name} with ID: {schema_id}")
             return str(schema_id)

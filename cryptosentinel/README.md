@@ -148,14 +148,22 @@ SCHEMA_REGISTRY_API_KEY=your-sr-api-key
 SCHEMA_REGISTRY_API_SECRET=your-sr-api-secret
 ```
 
-### Google Gemini API (Required)
+### Google Gemini (AI Studio or Vertex AI)
 
-1. Go to [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
-2. Create an API key
-3. Free tier: 15 requests/minute, 1 million tokens/day
+You can run the LLM pieces in one of two ways:
+
+1. **AI Studio (API key)**: easiest to get started
+2. **Vertex AI (GCP IAM)**: supports structured output for more reliable JSON (recommended if you already have GCP set up)
 
 ```env
 GEMINI_API_KEY=your-gemini-api-key
+
+# Set true to use Vertex AI instead of AI Studio
+USE_VERTEX_AI=false
+
+# Required when USE_VERTEX_AI=true
+GCP_PROJECT_ID=your-gcp-project-id
+GCP_REGION=us-central1
 ```
 
 ### Reddit API (Required)

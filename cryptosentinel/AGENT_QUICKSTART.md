@@ -4,7 +4,9 @@
 
 1. **Python 3.10+** installed
 2. **Confluent Cloud** account (free tier works)
-3. **Google Gemini API key** from [AI Studio](https://aistudio.google.com/app/apikey)
+3. **LLM access** (pick one):
+   - **AI Studio Gemini API key** from [AI Studio](https://aistudio.google.com/app/apikey), or
+   - **Vertex AI** enabled in a GCP project (with permission to call Gemini models)
 4. **Reddit API credentials** (optional, for crypto demo)
 
 ## Step 1: Install Dependencies
@@ -39,6 +41,13 @@ SCHEMA_REGISTRY_API_SECRET=your-sr-api-secret
 
 # Required: Google Gemini
 GEMINI_API_KEY=your-gemini-api-key
+
+# Optional: Use Vertex AI instead of AI Studio (structured output)
+# If USE_VERTEX_AI=true, you must set GCP_PROJECT_ID and authenticate
+# (ADC via `gcloud auth application-default login` or GOOGLE_APPLICATION_CREDENTIALS).
+USE_VERTEX_AI=false
+GCP_PROJECT_ID=your-gcp-project-id
+GCP_REGION=us-central1
 
 # Optional: Agent Configuration
 AGENT_MODE=true
@@ -248,6 +257,11 @@ pip install langgraph
 - Check your Gemini API key is correct
 - Verify you have API quota remaining
 - Check logs for Gemini API errors
+
+### "Permission 'aiplatform.endpoints.predict' denied"
+
+- Your GCP identity/service-account lacks `aiplatform.endpoints.predict`
+- Fix by granting the permission in IAM **or** set `USE_VERTEX_AI=false` to use `GEMINI_API_KEY` (AI Studio)
 
 ### "Data source discovery failed"
 
