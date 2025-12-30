@@ -118,25 +118,21 @@ class MultiAgentOrchestrator:
         This creates a single pipeline view in LangGraph Dev showing nested graphs:
         data_curation (with internal nodes visible) -> causal (with internal nodes visible) -> END
         
-        The agent graphs are embedded directly as subgraphs so their internal
-        structure is visible in LangGraph Dev.
+        We rebuild the agent subgraphs inline with the parent state schema (MultiAgentState)
+        to ensure state compatibility while showing nested structure.
         """
         if not LANGGRAPH_AVAILABLE:
             return None
         
         workflow = StateGraph(MultiAgentState)
         
-        # Add agent graphs directly as subgraph nodes
-        # This shows their internal structure in LangGraph Dev
-        if self.curation_agent.graph and self.causal_agent.graph:
-            # Add the uncompiled graphs directly - LangGraph will compile them as subgraphs
-            # and show their internal nodes
-            workflow.add_node("data_curation", self.curation_agent.graph.compile())
-            workflow.add_node("causal", self.causal_agent.graph.compile())
-        else:
-            # Fallback to wrapper functions if graphs not available
-            workflow.add_node("data_curation", self._data_curation_subgraph_wrapper)
-            workflow.add_node("causal", self._causal_subgraph_wrapper)
+        # Build subgraphs with MultiAgentState schema so state flows correctly
+        curation_subgraph = self._build_curation_subgraph()
+        causal_subgraph = self._build_causal_subgraph()
+        
+        # Add compiled subgraphs as nodes - LangGraph will show their internal structure
+        workflow.add_node("data_curation", curation_subgraph)
+        workflow.add_node("causal", causal_subgraph)
         
         # Set entry point
         workflow.set_entry_point("data_curation")
@@ -155,6 +151,152 @@ class MultiAgentOrchestrator:
         workflow.add_edge("causal", END)
         
         return workflow
+    
+    def _build_curation_subgraph(self):
+        """Build curation subgraph using MultiAgentState schema.
+        
+        This rebuilds the curation agent's workflow using the parent state schema
+        so that state flows correctly between the parent and subgraph.
+        """
+        subgraph = StateGraph(MultiAgentState)
+        
+        # Add curation nodes - these delegate to the curation agent's node methods
+        subgraph.add_node("discover_data_sources", self._curation_discover_node)
+        subgraph.add_node("integrate_pipelines", self._curation_integrate_node)
+        subgraph.add_node("collect_data", self._curation_collect_node)
+        subgraph.add_node("compute_readiness", self._curation_readiness_node)
+        
+        # Set entry point
+        subgraph.set_entry_point("discover_data_sources")
+        
+        # Define edges
+        subgraph.add_edge("discover_data_sources", "integrate_pipelines")
+        subgraph.add_edge("integrate_pipelines", "collect_data")
+        subgraph.add_edge("collect_data", "compute_readiness")
+        subgraph.add_edge("compute_readiness", END)
+        
+        return subgraph.compile()
+    
+    def _build_causal_subgraph(self):
+        """Build causal subgraph using MultiAgentState schema.
+        
+        This rebuilds the causal agent's workflow using the parent state schema
+        so that state flows correctly between the parent and subgraph.
+        """
+        subgraph = StateGraph(MultiAgentState)
+        
+        # Add causal nodes - these delegate to the causal agent's node methods
+        subgraph.add_node("generate_hypotheses", self._causal_generate_node)
+        subgraph.add_node("run_causal_tests", self._causal_test_node)
+        subgraph.add_node("discover_confounders", self._causal_confounders_node)
+        subgraph.add_node("test_confounders", self._causal_test_confounders_node)
+        subgraph.add_node("refine_hypotheses", self._causal_refine_node)
+        subgraph.add_node("evaluate_results", self._causal_evaluate_node)
+        
+        # Set entry point
+        subgraph.set_entry_point("generate_hypotheses")
+        
+        # Define edges
+        subgraph.add_edge("generate_hypotheses", "run_causal_tests")
+        subgraph.add_edge("run_causal_tests", "discover_confounders")
+        subgraph.add_edge("discover_confounders", "test_confounders")
+        subgraph.add_edge("test_confounders", "refine_hypotheses")
+        subgraph.add_edge("refine_hypotheses", "evaluate_results")
+        subgraph.add_edge("evaluate_results", END)
+        
+        return subgraph.compile()
+    
+    # =========================================================================
+    # Curation subgraph node wrappers
+    # =========================================================================
+    
+    def _curation_discover_node(self, state: MultiAgentState) -> dict:
+        """Discover data sources - delegates to curation agent."""
+        curation_state = self._to_curation_state(state)
+        result = self.curation_agent._discover_data_sources_node(curation_state)
+        return self._merge_curation_result(result, state)
+    
+    def _curation_integrate_node(self, state: MultiAgentState) -> dict:
+        """Integrate pipelines - delegates to curation agent."""
+        curation_state = self._to_curation_state(state)
+        result = self.curation_agent._integrate_pipelines_node(curation_state)
+        return self._merge_curation_result(result, state)
+    
+    def _curation_collect_node(self, state: MultiAgentState) -> dict:
+        """Collect data - delegates to curation agent."""
+        curation_state = self._to_curation_state(state)
+        result = self.curation_agent._collect_data_node(curation_state)
+        return self._merge_curation_result(result, state)
+    
+    def _curation_readiness_node(self, state: MultiAgentState) -> dict:
+        """Compute readiness - delegates to curation agent."""
+        curation_state = self._to_curation_state(state)
+        result = self.curation_agent._compute_readiness_node(curation_state)
+        return self._merge_curation_result(result, state)
+    
+    def _merge_curation_result(self, result: dict, original_state: MultiAgentState) -> dict:
+        """Merge curation node result back to MultiAgentState format."""
+        merged = {}
+        for key, value in result.items():
+            if key in ("datasets", "active_data_sources", "discovered_variables"):
+                merged[key] = value
+            elif key == "metadata":
+                merged[key] = {**original_state.get("metadata", {}), **value}
+            elif key in ("readiness_score", "is_ready", "current_row_count", "status", "error", "iteration"):
+                merged[key] = value
+        return merged
+    
+    # =========================================================================
+    # Causal subgraph node wrappers
+    # =========================================================================
+    
+    def _causal_generate_node(self, state: MultiAgentState) -> dict:
+        """Generate hypotheses - delegates to causal agent."""
+        agent_state = self._to_agent_state(state)
+        result = self.causal_agent._generate_hypotheses_node(agent_state)
+        return self._merge_causal_result(result, state)
+    
+    def _causal_test_node(self, state: MultiAgentState) -> dict:
+        """Run causal tests - delegates to causal agent."""
+        agent_state = self._to_agent_state(state)
+        result = self.causal_agent._run_causal_tests_node(agent_state)
+        return self._merge_causal_result(result, state)
+    
+    def _causal_confounders_node(self, state: MultiAgentState) -> dict:
+        """Discover confounders - delegates to causal agent."""
+        agent_state = self._to_agent_state(state)
+        result = self.causal_agent._discover_confounders_node(agent_state)
+        return self._merge_causal_result(result, state)
+    
+    def _causal_test_confounders_node(self, state: MultiAgentState) -> dict:
+        """Test confounders - delegates to causal agent."""
+        agent_state = self._to_agent_state(state)
+        result = self.causal_agent._test_confounders_node(agent_state)
+        return self._merge_causal_result(result, state)
+    
+    def _causal_refine_node(self, state: MultiAgentState) -> dict:
+        """Refine hypotheses - delegates to causal agent."""
+        agent_state = self._to_agent_state(state)
+        result = self.causal_agent._refine_hypotheses_node(agent_state)
+        return self._merge_causal_result(result, state)
+    
+    def _causal_evaluate_node(self, state: MultiAgentState) -> dict:
+        """Evaluate results - delegates to causal agent."""
+        agent_state = self._to_agent_state(state)
+        result = self.causal_agent._evaluate_results_node(agent_state)
+        return self._merge_causal_result(result, state)
+    
+    def _merge_causal_result(self, result: dict, original_state: MultiAgentState) -> dict:
+        """Merge causal node result back to MultiAgentState format."""
+        merged = {}
+        for key, value in result.items():
+            if key in ("hypotheses", "results", "discovered_variables", "active_data_sources"):
+                merged[key] = value
+            elif key == "metadata":
+                merged[key] = {**original_state.get("metadata", {}), **value}
+            elif key in ("status", "error", "iteration"):
+                merged[key] = value
+        return merged
     
     def _to_curation_state(self, state: MultiAgentState) -> CurationState:
         """Convert MultiAgentState to CurationState for the curation agent."""
