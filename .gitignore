@@ -200,3 +200,7 @@ kafka-logs/
 # Streamlit
 .streamlit/
 
+# LangGraph
+.langgraph_api/
+*.pckl
+
