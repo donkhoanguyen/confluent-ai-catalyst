@@ -23,26 +23,28 @@ def render_agent_view():
     </div>
     """, unsafe_allow_html=True)
     
-    # Sidebar controls
-    with st.sidebar:
-        st.markdown("## ⚙️ Agent Configuration")
-        domain = st.text_input(
-            "Domain", 
-            value="cryptocurrency", 
-            help="Domain to explore (e.g., cryptocurrency, healthcare, finance)"
-        )
-        query = st.text_area(
-            "Research Question",
-            value="Does social sentiment cause price movements?",
-            help="What causal relationship do you want to discover?",
-            height=100
-        )
-        
-        st.markdown("---")
+    # Discovery Configuration - Now in the main page
+    with st.expander("⚙️ Agent Configuration", expanded=True):
+        col_c1, col_c2 = st.columns([1, 2])
+        with col_c1:
+            domain = st.text_input(
+                "Domain", 
+                value="cryptocurrency", 
+                help="Domain to explore (e.g., cryptocurrency, healthcare, finance)"
+            )
+        with col_c2:
+            query = st.text_area(
+                "Research Question",
+                value="Does social sentiment cause price movements?",
+                help="What causal relationship do you want to discover?",
+                height=68
+            )
         
         if st.button("🚀 Start Discovery", type="primary", use_container_width=True):
             with st.spinner("Starting discovery... This may take a few minutes."):
                 start_discovery(domain, query)
+    
+    st.markdown("---")
     
     # Main content
     col1, col2 = st.columns([2, 1])

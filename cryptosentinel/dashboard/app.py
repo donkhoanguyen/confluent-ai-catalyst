@@ -554,17 +554,21 @@ def main():
                 key="page_selector",
                 label_visibility="visible"
             )
-            st.markdown("---")
-            
-            if page == "Agent Discovery":
-                # Switch to agent view (will return, so rest won't execute)
-                render_agent_view()
-                return
         else:
+            page = "Dashboard"
             st.warning("⚠️ Agent Discovery not available")
             st.info("Check terminal logs for import errors")
-            st.markdown("---")
         
+        st.markdown("---")
+
+    # Handle page routing
+    if page == "Agent Discovery":
+        if AGENT_VIEW_AVAILABLE:
+            render_agent_view()
+        return
+
+    # Dashboard-specific Sidebar Settings
+    with st.sidebar:
         st.markdown("## ⚙️ Settings")
 
         # Coin selector
