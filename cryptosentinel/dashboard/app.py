@@ -14,20 +14,31 @@ import plotly.graph_objects as go
 import streamlit as st
 from loguru import logger
 
-# Import agent view - try multiple import paths for robustness
-AGENT_VIEW_AVAILABLE = False
-render_agent_view = None
+# Import views - try multiple import paths for robustness
+CURATION_VIEW_AVAILABLE = False
+CAUSAL_VIEW_AVAILABLE = False
+render_curation_view = None
+render_causal_view = None
 
 try:
-    from dashboard.agent_view import render_agent_view
-    AGENT_VIEW_AVAILABLE = True
+    from dashboard.curation_view import render_curation_view
+    CURATION_VIEW_AVAILABLE = True
 except ImportError:
     try:
-        # Fallback for direct script execution
-        from agent_view import render_agent_view
-        AGENT_VIEW_AVAILABLE = True
+        from curation_view import render_curation_view
+        CURATION_VIEW_AVAILABLE = True
     except ImportError as e:
-        logger.warning(f"Agent view not available: {e}")
+        logger.warning(f"Curation view not available: {e}")
+
+try:
+    from dashboard.agent_view import render_causal_view
+    CAUSAL_VIEW_AVAILABLE = True
+except ImportError:
+    try:
+        from agent_view import render_causal_view
+        CAUSAL_VIEW_AVAILABLE = True
+    except ImportError as e:
+        logger.warning(f"Causal view not available: {e}")
 
 # =============================================================================
 # Page Configuration
@@ -547,24 +558,40 @@ def main():
     with st.sidebar:
         # Navigation selector at the very top - ALWAYS show
         st.markdown("## 🧭 Navigation")
-        if AGENT_VIEW_AVAILABLE:
-            page = st.selectbox(
-                "Select Page",
-                ["Dashboard", "Agent Discovery"],
-                key="page_selector",
-                label_visibility="visible"
-            )
-        else:
-            page = "Dashboard"
-            st.warning("⚠️ Agent Discovery not available")
+        
+        # Build available pages list
+        pages = ["Dashboard"]
+        if CURATION_VIEW_AVAILABLE:
+            pages.append("Data Curation")
+        if CAUSAL_VIEW_AVAILABLE:
+            pages.append("Causal Inference")
+        
+        page = st.selectbox(
+            "Select Page",
+            pages,
+            key="page_selector",
+            label_visibility="visible"
+        )
+        
+        # Show warnings for unavailable views
+        if not CURATION_VIEW_AVAILABLE and not CAUSAL_VIEW_AVAILABLE:
+            st.warning("⚠️ Agent views not available")
             st.info("Check terminal logs for import errors")
+        elif not CURATION_VIEW_AVAILABLE:
+            st.warning("⚠️ Data Curation view not available")
+        elif not CAUSAL_VIEW_AVAILABLE:
+            st.warning("⚠️ Causal Inference view not available")
         
         st.markdown("---")
 
     # Handle page routing
-    if page == "Agent Discovery":
-        if AGENT_VIEW_AVAILABLE:
-            render_agent_view()
+    if page == "Data Curation":
+        if CURATION_VIEW_AVAILABLE:
+            render_curation_view()
+        return
+    elif page == "Causal Inference":
+        if CAUSAL_VIEW_AVAILABLE:
+            render_causal_view()
         return
 
     # Dashboard-specific Sidebar Settings

@@ -1,5 +1,7 @@
 """
-Agent Discovery Dashboard View
+Causal Inference Dashboard View
+
+Handles hypothesis generation, causal testing, confounder discovery, and result refinement.
 """
 
 import streamlit as st
@@ -11,20 +13,20 @@ import httpx
 from loguru import logger
 
 
-def render_agent_view():
-    """Render the agent discovery view."""
+def render_causal_view():
+    """Render the causal inference view."""
     # Main header
     st.markdown("""
     <div style="text-align: center; padding: 20px 0;">
-        <h1>🤖 Autonomous Causal Discovery Agent</h1>
+        <h1>🔬 Causal Inference</h1>
         <p style="color: #a0a0b0; font-size: 1.1rem;">
-            Discover causal relationships automatically using AI-powered hypothesis generation
+            Generate hypotheses, test causal relationships, and discover confounders using AI-powered analysis
         </p>
     </div>
     """, unsafe_allow_html=True)
     
-    # Discovery Configuration - Now in the main page
-    with st.expander("⚙️ Agent Configuration", expanded=True):
+    # Causal Discovery Configuration - Now in the main page
+    with st.expander("⚙️ Causal Discovery Configuration", expanded=True):
         col_c1, col_c2 = st.columns([1, 2])
         with col_c1:
             domain = st.text_input(
@@ -40,9 +42,14 @@ def render_agent_view():
                 height=68
             )
         
-        if st.button("🚀 Start Discovery", type="primary", use_container_width=True):
-            with st.spinner("Starting discovery... This may take a few minutes."):
-                start_discovery(domain, query)
+        col_btn1, col_btn2 = st.columns([1, 1])
+        with col_btn1:
+            if st.button("🚀 Start Discovery", type="primary", use_container_width=True):
+                with st.spinner("Starting causal discovery... This may take a few minutes."):
+                    start_discovery(domain, query)
+        with col_btn2:
+            if st.button("🔄 Refresh Status", use_container_width=True):
+                refresh_discovery_status(domain)
     
     st.markdown("---")
     
@@ -74,7 +81,7 @@ def render_agent_view():
 
 
 def start_discovery(domain: str, query: str):
-    """Start a discovery process."""
+    """Start a causal discovery process."""
     try:
         with httpx.Client(timeout=300.0, follow_redirects=True) as client:
             response = client.post(
@@ -84,7 +91,7 @@ def start_discovery(domain: str, query: str):
             response.raise_for_status()
             result = response.json()
             
-            st.success(f"Discovery started! Status: {result['status']}")
+            st.success(f"Causal discovery started! Status: {result.get('status', 'UNKNOWN')}")
             st.session_state['discovery_result'] = result
             
     except httpx.ConnectError as e:
@@ -105,10 +112,27 @@ def start_discovery(domain: str, query: str):
         logger.error(f"Discovery error: {e}")
 
 
+def refresh_discovery_status(domain: str):
+    """Refresh discovery status from API."""
+    try:
+        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+            response = client.get(
+                f"http://localhost:8000/api/agent/discover/status/{domain}",
+            )
+            response.raise_for_status()
+            result = response.json()
+            st.info(f"Status refreshed for domain: {domain}")
+            # Update session state if we have active discoveries
+            if result.get("active_discoveries"):
+                st.session_state['discovery_result'] = result.get("active_discoveries")[0]
+    except Exception as e:
+        st.warning(f"Could not refresh status: {e}")
+
+
 def display_discovery_status(status_placeholder, metrics_placeholder):
-    """Display discovery status."""
+    """Display causal discovery status."""
     if 'discovery_result' not in st.session_state:
-        status_placeholder.info("No active discovery. Start one from the sidebar.")
+        status_placeholder.info("No active discovery. Start one from the configuration above.")
         metrics_placeholder.info("No metrics available.")
         return
     
