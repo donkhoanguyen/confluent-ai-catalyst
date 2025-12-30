@@ -284,7 +284,7 @@ class APIClient:
 
     def __init__(self, base_url: str = "http://localhost:8000"):
         self.base_url = base_url
-        self.client = httpx.Client(timeout=10.0)
+        self.client = httpx.Client(timeout=10.0, follow_redirects=True)
 
     def get_dashboard_state(self) -> Optional[dict]:
         """Fetch complete dashboard state."""
@@ -292,24 +292,43 @@ class APIClient:
             response = self.client.get(f"{self.base_url}/api/dashboard")
             response.raise_for_status()
             return response.json()
+        except httpx.ConnectError as e:
+            logger.error(f"Connection error: Cannot connect to {self.base_url}. Is the API server running?")
+            return None
+        except httpx.TimeoutException as e:
+            logger.error(f"Timeout error: Request to {self.base_url} timed out")
+            return None
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error: {e.response.status_code} - {e.response.text}")
+            return None
         except Exception as e:
-            logger.error(f"API error: {e}")
+            logger.error(f"API error: {type(e).__name__}: {e}")
             return None
 
     def get_prices(self) -> dict:
         """Fetch current prices."""
         try:
             response = self.client.get(f"{self.base_url}/api/prices")
+            response.raise_for_status()
             return response.json()
-        except Exception:
+        except httpx.ConnectError:
+            logger.warning(f"Cannot connect to {self.base_url} for prices")
+            return {}
+        except Exception as e:
+            logger.warning(f"Error fetching prices: {e}")
             return {}
 
     def get_causal(self, coin_id: str) -> Optional[dict]:
         """Fetch causal analysis for a coin."""
         try:
             response = self.client.get(f"{self.base_url}/api/causal/{coin_id}")
+            response.raise_for_status()
             return response.json()
-        except Exception:
+        except httpx.ConnectError:
+            logger.warning(f"Cannot connect to {self.base_url} for causal data")
+            return None
+        except Exception as e:
+            logger.warning(f"Error fetching causal data: {e}")
             return None
 
 

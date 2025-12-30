@@ -323,24 +323,40 @@ class HypothesisGenerator:
         text = self._clean_json_text(response.text)
         return json.loads(text)
     
-    def generate(self, domain: str, query: str, include_wish_list: bool = True) -> Tuple[List[Hypothesis], List[Hypothesis]]:
+    def generate(self, domain: str, query: str, include_wish_list: bool = True, 
+                 discovered_variables: Optional[List[Variable]] = None,
+                 active_data_sources: Optional[List] = None) -> Tuple[List[Hypothesis], List[Hypothesis]]:
         """
         Generate causal hypotheses for a domain and query.
-        Only uses variables and data sources that exist in the registry.
+        Uses discovered variables and data sources if provided, otherwise falls back to registry.
         
         Args:
-            domain: Domain name (e.g., "cryptocurrency")
+            domain: Domain name (e.g., "healthcare", "finance", "retail", "energy")
             query: Research question
             include_wish_list: If True, also return wish list hypotheses (not currently measurable)
+            discovered_variables: Optional list of variables discovered by DataCurationAgent
+            active_data_sources: Optional list of data sources discovered by DataCurationAgent
             
         Returns:
             Tuple of (testable_hypotheses, wish_list_hypotheses)
             - testable_hypotheses: Hypotheses with all variables available
             - wish_list_hypotheses: Hypotheses with unavailable variables (marked as wish_list=True)
         """
-        # Get available variables and sources for this domain
-        available_vars = self.registry.get_variables_by_domain(domain)
-        available_sources = self.registry.list_available_data_sources()
+        # Use discovered variables if provided, otherwise fall back to registry
+        if discovered_variables:
+            available_vars = discovered_variables
+            logger.info(f"Using {len(discovered_variables)} discovered variables from DataCurationAgent")
+        else:
+            available_vars = self.registry.get_variables_by_domain(domain)
+            logger.info(f"Using {len(available_vars)} variables from registry")
+        
+        # Use discovered data sources if provided, otherwise fall back to registry
+        if active_data_sources:
+            available_sources = active_data_sources
+            logger.info(f"Using {len(active_data_sources)} discovered data sources from DataCurationAgent")
+        else:
+            available_sources = self.registry.list_available_data_sources()
+            logger.info(f"Using {len(available_sources)} data sources from registry")
         
         # Format variables for prompt
         var_list = []

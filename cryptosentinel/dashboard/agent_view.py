@@ -74,11 +74,10 @@ def render_agent_view():
 def start_discovery(domain: str, query: str):
     """Start a discovery process."""
     try:
-        with httpx.Client() as client:
+        with httpx.Client(timeout=300.0, follow_redirects=True) as client:
             response = client.post(
                 "http://localhost:8000/api/agent/discover",
                 json={"domain": domain, "query": query},
-                timeout=300.0,  # 5 minute timeout
             )
             response.raise_for_status()
             result = response.json()
@@ -86,8 +85,21 @@ def start_discovery(domain: str, query: str):
             st.success(f"Discovery started! Status: {result['status']}")
             st.session_state['discovery_result'] = result
             
+    except httpx.ConnectError as e:
+        error_msg = f"Cannot connect to API server at http://localhost:8000. Is the API server running?"
+        st.error(error_msg)
+        logger.error(f"Connection error: {e}")
+    except httpx.TimeoutException as e:
+        error_msg = f"Request timed out. The discovery process may be taking longer than expected."
+        st.error(error_msg)
+        logger.error(f"Timeout error: {e}")
+    except httpx.HTTPStatusError as e:
+        error_msg = f"HTTP error {e.response.status_code}: {e.response.text}"
+        st.error(error_msg)
+        logger.error(f"HTTP error: {e}")
     except Exception as e:
-        st.error(f"Error starting discovery: {e}")
+        error_msg = f"Error starting discovery: {type(e).__name__}: {e}"
+        st.error(error_msg)
         logger.error(f"Discovery error: {e}")
 
 

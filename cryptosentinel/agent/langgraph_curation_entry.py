@@ -1,22 +1,22 @@
 """
-LangGraph entrypoint for the causal discovery agent.
+LangGraph entrypoint for the data curation agent.
 This exposes the compiled LangGraph app so `langgraph dev` can load it.
 """
 
 import os
 from dotenv import load_dotenv
 
-# Load .env file to ensure LangSmith environment variables are available
+# Load .env file to ensure environment variables are available
 load_dotenv(override=True)
 
-# Ensure LANGCHAIN_API_KEY is set if LANGSMITH_API_KEY exists but LANGCHAIN_API_KEY doesn't
+# Ensure LANGCHAIN_API_KEY is set if LANGSMITH_API_KEY exists
 if os.getenv("LANGSMITH_API_KEY") and not os.getenv("LANGCHAIN_API_KEY"):
     os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGSMITH_API_KEY")
 
-from agent.orchestrator import CausalDiscoveryAgent
+from agent.curation_orchestrator import DataCurationAgent
 
 
-agent = CausalDiscoveryAgent()
+agent = DataCurationAgent()
 if not agent.app:
     raise RuntimeError(
         "LangGraph app not available. Ensure `langgraph` is installed and "
