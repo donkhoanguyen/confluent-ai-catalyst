@@ -627,15 +627,20 @@ async def list_csv_files():
 def main():
     """Run the API server."""
     import uvicorn
+    import os
 
     from config.settings import get_settings
     settings = get_settings()
 
+    # Use PORT from environment (Railway provides this), fallback to settings
+    port = int(os.getenv("PORT", settings.api_port))
+    host = os.getenv("HOST", settings.api_host)
+
     uvicorn.run(
         "api.main:app",
-        host=settings.api_host,
-        port=settings.api_port,
-        reload=True,
+        host=host,
+        port=port,
+        reload=False,  # Set to False for production
     )
 
 

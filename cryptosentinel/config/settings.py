@@ -149,8 +149,8 @@ class Settings(BaseSettings):
     )
 
     # API Server
-    api_host: str = Field(default="0.0.0.0")
-    api_port: int = Field(default=8000)
+    api_host: str = Field(default="0.0.0.0", alias="HOST")
+    api_port: int = Field(default=8000, alias="PORT")
 
     # Streamlit
     streamlit_port: int = Field(default=8501)
