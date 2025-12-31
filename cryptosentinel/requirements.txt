@@ -44,7 +44,7 @@ pydantic-settings>=2.0.0
 loguru>=0.7.0
 tenacity>=8.2.0
 
-# Agent Framework
+# Agent Framework (requires Python 3.11+)
 langgraph>=1.0.5
 langgraph-api>=0.6.15
 langgraph-cli>=0.4.11
