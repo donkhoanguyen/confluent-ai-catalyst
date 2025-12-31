@@ -7,13 +7,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# Upgrade pip first for better resolver
+RUN pip install --upgrade pip setuptools wheel
+
 # Copy requirements first for better caching
-# Use deploy-optimized requirements (excludes heavy causalml package)
+# Use deploy-optimized requirements (pinned versions to avoid backtracking)
 COPY cryptosentinel/requirements-deploy.txt ./requirements.txt
 
 # Install dependencies with optimizations for speed
 # --prefer-binary: use pre-built wheels when available
 # --no-cache-dir: don't cache to save space
+# Pinned versions prevent pip backtracking
 RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
 
 # Copy application code
