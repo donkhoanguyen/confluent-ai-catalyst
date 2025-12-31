@@ -13,8 +13,9 @@ pandas==2.3.3
 numpy==2.4.0
 
 # Causal Inference - Core (required for granger tests)
+# scipy must be <=1.15.3 for dowhy compatibility
 statsmodels==0.14.6
-scipy==1.16.3
+scipy==1.15.3
 scikit-learn==1.8.0
 
 # Causal Inference - Optional (agent endpoints, fail gracefully if missing)
