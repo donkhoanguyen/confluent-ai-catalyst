@@ -29,8 +29,10 @@ linearmodels==7.0
 confluent-kafka==2.12.2
 fastavro==1.12.1
 
-# Google AI
-google-generativeai==0.8.6
+# Google AI (google.genai comes from google-cloud-aiplatform)
+# Removed google-generativeai - not used, causes protobuf conflicts
+# Pin protobuf to satisfy both google-cloud-aiplatform (>=3.20.2,<7.0.0) and langgraph-api (>=6.32.1,<7.0.0)
+protobuf==6.33.2
 google-cloud-aiplatform==1.132.0
 
 # API Clients

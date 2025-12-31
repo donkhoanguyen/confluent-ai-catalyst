@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>CausalLab - AI-Powered Causal Discovery</title>
+
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reset.min.css">
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.css">
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/theme/dracula.min.css">
+
+		<!-- Custom Cyberpunk Styling -->
+		<style>
+			:root {
+				--r-main-font: 'Inter', sans-serif;
+				--r-heading-font: 'Inter', sans-serif;
+				--accent-color: #00f2ff;
+				--secondary-color: #7000ff;
+			}
+			.reveal h1, .reveal h2, .reveal h3 {
+				text-transform: none;
+				color: var(--accent-color);
+				text-shadow: 0 0 20px rgba(0, 242, 255, 0.3);
+			}
+			.reveal .slides section {
+				text-align: left;
+			}
+			.highlight {
+				color: var(--accent-color);
+				font-weight: bold;
+			}
+			.purple-highlight {
+				color: var(--secondary-color);
+				font-weight: bold;
+			}
+			.box {
+				background: rgba(255, 255, 255, 0.05);
+				padding: 20px;
+				border-radius: 10px;
+				border-left: 5px solid var(--accent-color);
+				margin-top: 20px;
+			}
+			.grid {
+				display: grid;
+				grid-template-columns: 1fr 1fr; gap: 20px;
+			}
+			.reveal .footer {
+				position: absolute;
+				bottom: 20px;
+				left: 20px;
+				font-size: 0.5em;
+				opacity: 0.5;
+			}
+			.centered {
+				text-align: center !important;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="reveal">
+			<div class="slides">
+
+				<!-- Title Slide -->
+				<section data-background-gradient="linear-gradient(to bottom, #000, #1a0033)" class="centered">
+					<h1>🔬 CausalLab</h1>
+					<h3>AI-Powered Causal Discovery Platform</h3>
+					<p>Autonomous Causal Discovery for Real-Time Streaming Data</p>
+					<div class="footer">Built for Confluent + Google AI Hackathon</div>
+				</section>
+
+				<!-- Part 1: What is Causal Inference? -->
+				<section>
+					<h2>What is Causal Inference?</h2>
+					<p class="fragment">Beyond simple correlation.</p>
+					<div class="grid">
+						<div class="box fragment">
+							<h4>Correlation</h4>
+							<p>"When A happens, B usually happens too."</p>
+							<small>Example: Ice cream sales and shark attacks both go up in summer.</small>
+						</div>
+						<div class="box fragment" style="border-left-color: var(--secondary-color);">
+							<h4>Causality</h4>
+							<p>"A <strong>causes</strong> B to happen."</p>
+							<small>Example: Heat causes ice cream sales AND heat causes people to swim (sharks).</small>
+						</div>
+					</div>
+					<p class="fragment" style="margin-top: 40px;">Causal Inference is the science of <span class="highlight">proving "Why"</span> things happen, not just "What" happened.</p>
+				</section>
+
+				<!-- Why it matters for Business -->
+				<section>
+					<h2>Why it Matters for Business</h2>
+					<ul>
+						<li class="fragment"><strong>Stop Wasting Budget:</strong> Don't optimize for metrics that don't drive revenue.</li>
+						<li class="fragment"><strong>Predict Outcomes:</strong> If we change price by $1, what is the <em>true</em> effect on churn?</li>
+						<li class="fragment"><strong>Risk Mitigation:</strong> Identify hidden "confounders" (external factors) that could crash your strategy.</li>
+						<li class="fragment"><strong>Real-Time Strategy:</strong> Reactive data analysis is too slow; autonomous discovery catches trends as they form.</li>
+					</ul>
+				</section>
+
+				<!-- Part 2: How CausalLab Accelerates Science/Business -->
+				<section>
+					<h2>The Bottleneck</h2>
+					<p>Traditional research takes <span class="highlight">months</span> of manual work:</p>
+					<div class="grid">
+						<div class="fragment">
+							<p>❌ Manual data hunting</p>
+							<p>❌ Guessing hypotheses</p>
+						</div>
+						<div class="fragment">
+							<p>❌ Complex statistical coding</p>
+							<p>❌ Missing hidden factors</p>
+						</div>
+					</div>
+				</section>
+
+				<!-- The Solution: CausalLab -->
+				<section data-background-color="#111">
+					<h2>Accelerating with CausalLab</h2>
+					<p>We use <span class="highlight">Autonomous AI Agents</span> to shrink months into minutes.</p>
+					<div class="box fragment">
+						<h4>1. Autonomous Data Curation</h4>
+						<p>AI automatically finds relevant APIs, streams, and databases via <strong>Confluent Cloud</strong>.</p>
+					</div>
+					<div class="box fragment" style="border-left-color: var(--secondary-color);">
+						<h4>2. AI Hypothesis Generation</h4>
+						<p>Google Gemini understands your question and builds <strong>grounded hypotheses</strong> from available data.</p>
+					</div>
+				</section>
+
+				<!-- Advanced Inference -->
+				<section>
+					<h2>Statistical Rigor at Speed</h2>
+					<p>Scientists get the tools they trust, automatically applied:</p>
+					<div class="grid">
+						<div>
+							<ul>
+								<li>Granger Causality</li>
+								<li>Instrumental Variables (IV)</li>
+								<li>Transfer Entropy</li>
+							</ul>
+						</div>
+						<div class="box">
+							<p class="highlight">Auto-Confounder Discovery</p>
+							<p><small>The AI searches for 3rd-party variables that might be "tricking" your results, ensuring <strong>truth</strong>, not just <strong>noise</strong>.</small></p>
+						</div>
+					</div>
+				</section>
+
+				<!-- Use Case: Crypto Example -->
+				<section>
+					<h2>Example: Cryptocurrency</h2>
+					<p><strong>Question:</strong> "Does social sentiment cause price movements?"</p>
+					<div class="box fragment">
+						<p>✅ <strong>Result:</strong> Sentiment leads price by 10 minutes (85% confidence).</p>
+						<p>✅ <strong>Controlled for:</strong> Market cap, trading volume, news events.</p>
+					</div>
+					<p class="fragment" style="margin-top:20px;">Research cycle: <span class="highlight">10x Faster</span>.</p>
+				</section>
+
+				<!-- Conclusion -->
+				<section data-background-gradient="linear-gradient(to top, #000, #1a0033)" class="centered">
+					<h2>CausalLab</h2>
+					<h3>Empowering Science & Business</h3>
+					<div class="grid" style="margin-top: 50px;">
+						<div class="box">
+							<h4>For Scientists</h4>
+							<p>Reproducible, faster, and more rigorous research.</p>
+						</div>
+						<div class="box" style="border-left-color: var(--secondary-color);">
+							<h4>For Business</h4>
+							<p>Data-driven decisions with real-time causal certainty.</p>
+						</div>
+					</div>
+				</section>
+
+			</div>
+		</div>
+
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.js"></script>
+		<script>
+			Reveal.initialize({
+				hash: true,
+				center: true,
+				transition: 'convex',
+				plugins: [ ]
+			});
+		</script>
+	</body>
+</html>
