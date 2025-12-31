@@ -4,12 +4,16 @@ Data Curation Dashboard View
 Handles data discovery, pipeline integration, data collection, and readiness assessment.
 """
 
+import os
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 from typing import List, Dict, Any, Optional
 import httpx
 from loguru import logger
+
+# Get API URL from environment variable
+API_URL = os.getenv("API_URL", "http://localhost:8000")
 
 
 def render_curation_view():
@@ -98,7 +102,7 @@ def start_curation(domain: str, config_str: str):
         
         with httpx.Client(timeout=300.0, follow_redirects=True) as client:
             response = client.post(
-                "http://localhost:8000/api/agent/curate",
+                f"{API_URL}/api/agent/curate",
                 json={"domain": domain, "config": config},
             )
             response.raise_for_status()
@@ -108,7 +112,7 @@ def start_curation(domain: str, config_str: str):
             st.session_state['curation_result'] = result
             
     except httpx.ConnectError as e:
-        error_msg = f"Cannot connect to API server at http://localhost:8000. Is the API server running?"
+        error_msg = f"Cannot connect to API server at {API_URL}. Is the API server running?"
         st.error(error_msg)
         logger.error(f"Connection error: {e}")
     except httpx.TimeoutException as e:
@@ -130,7 +134,7 @@ def refresh_curation_status(domain: str):
     try:
         with httpx.Client(timeout=30.0, follow_redirects=True) as client:
             response = client.get(
-                f"http://localhost:8000/api/agent/curate/status/{domain}",
+                f"{API_URL}/api/agent/curate/status/{domain}",
             )
             response.raise_for_status()
             result = response.json()

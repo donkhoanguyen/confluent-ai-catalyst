@@ -4,6 +4,7 @@ Causal Inference Dashboard View
 Handles hypothesis generation, causal testing, confounder discovery, and result refinement.
 """
 
+import os
 import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
@@ -11,6 +12,9 @@ import pandas as pd
 from typing import List, Dict, Any
 import httpx
 from loguru import logger
+
+# Get API URL from environment variable
+API_URL = os.getenv("API_URL", "http://localhost:8000")
 
 
 def render_causal_view():
@@ -85,7 +89,7 @@ def start_discovery(domain: str, query: str):
     try:
         with httpx.Client(timeout=300.0, follow_redirects=True) as client:
             response = client.post(
-                "http://localhost:8000/api/agent/discover",
+                f"{API_URL}/api/agent/discover",
                 json={"domain": domain, "query": query},
             )
             response.raise_for_status()
@@ -95,7 +99,7 @@ def start_discovery(domain: str, query: str):
             st.session_state['discovery_result'] = result
             
     except httpx.ConnectError as e:
-        error_msg = f"Cannot connect to API server at http://localhost:8000. Is the API server running?"
+        error_msg = f"Cannot connect to API server at {API_URL}. Is the API server running?"
         st.error(error_msg)
         logger.error(f"Connection error: {e}")
     except httpx.TimeoutException as e:
@@ -117,7 +121,7 @@ def refresh_discovery_status(domain: str):
     try:
         with httpx.Client(timeout=30.0, follow_redirects=True) as client:
             response = client.get(
-                f"http://localhost:8000/api/agent/discover/status/{domain}",
+                f"{API_URL}/api/agent/discover/status/{domain}",
             )
             response.raise_for_status()
             result = response.json()

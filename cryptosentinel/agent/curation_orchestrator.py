@@ -33,7 +33,7 @@ except ImportError:
     LANGGRAPH_AVAILABLE = False
     logger.warning("langgraph not available - using simplified orchestrator")
 
-from .models import DataSource, Variable
+from .models import DataSource, DataSourceType, Variable
 from .asset_registry import get_asset_registry
 
 try:
@@ -366,7 +366,15 @@ class DataCurationAgent:
         return datasets
     
     def _integrate_new_sources(self, sources: List[DataSource], state: CurationState) -> int:
-        """Integrate new data sources via Confluent."""
+        """
+        Integrate new data sources via Confluent.
+        
+        This method:
+        1. Creates Kafka topics for each source
+        2. Registers Avro schemas in Schema Registry
+        3. Creates Kafka Connect connectors for REST APIs (via MCP if available)
+        4. Uses AI to generate connector configs for complex APIs
+        """
         if self.offline_mode:
             return 0
         
@@ -375,30 +383,120 @@ class DataCurationAgent:
             client = ConfluentClient(self.settings)
             
             integrated = 0
+            connectors_created = 0
             existing_topics = {s.kafka_topic for s in state.get("active_data_sources", []) if s.kafka_topic}
+            
+            # Check MCP capabilities
+            capabilities = client.get_capabilities()
+            use_connectors = capabilities.get("connectors", False)
+            
+            if use_connectors:
+                logger.info("MCP available - will create connectors for REST APIs")
             
             for source in sources:
                 if source.kafka_topic and source.kafka_topic in existing_topics:
                     continue
                 
                 try:
+                    # Step 1: Create Kafka topic
                     topic = client.create_topic_for_source(source)
                     source.kafka_topic = topic
                     
+                    # Step 2: Register schema
                     from .domain import SchemaTemplate
                     schema = SchemaTemplate.for_data_source(source)
                     client.register_schema(source, schema)
                     
+                    # Step 3: Create connector for REST APIs (if MCP available)
+                    if use_connectors and source.source_type == DataSourceType.API_REST:
+                        connector_name = self._create_connector_for_source(client, source)
+                        if connector_name:
+                            connectors_created += 1
+                            source.metadata["connector_name"] = connector_name
+                            logger.info(f"Created connector: {connector_name}")
+                    
                     logger.info(f"Integrated source: {source.name} -> topic: {topic}")
                     integrated += 1
+                    
                 except Exception as e:
                     logger.warning(f"Failed to integrate source {source.name}: {e}")
+            
+            if connectors_created > 0:
+                logger.info(f"Created {connectors_created} Kafka Connect connectors via MCP")
             
             return integrated
             
         except ImportError:
             logger.warning("Confluent client not available")
             return 0
+    
+    def _create_connector_for_source(self, client, source: DataSource) -> Optional[str]:
+        """
+        Create a Kafka Connect connector for a data source.
+        
+        Uses AI-powered connector generation for complex APIs,
+        or pre-built templates for known APIs.
+        
+        Args:
+            client: ConfluentClient instance
+            source: DataSource to create connector for
+            
+        Returns:
+            Connector name if created, None otherwise
+        """
+        try:
+            # Check for known API types with pre-built configs
+            api_type = source.metadata.get("api_type", "").lower()
+            
+            if api_type in ("coingecko", "newsdata", "fear_greed"):
+                # Use pre-built connector templates
+                from .connector_generator import (
+                    create_coingecko_connector,
+                    create_newsdata_connector,
+                    create_fear_greed_connector,
+                )
+                
+                if api_type == "coingecko":
+                    config = create_coingecko_connector(
+                        topic=source.kafka_topic,
+                        api_key=source.api_key,
+                    )
+                elif api_type == "newsdata":
+                    config = create_newsdata_connector(
+                        topic=source.kafka_topic,
+                        api_key=source.api_key or "",
+                    )
+                elif api_type == "fear_greed":
+                    config = create_fear_greed_connector(
+                        topic=source.kafka_topic,
+                    )
+                else:
+                    config = None
+                
+                if config:
+                    return client.create_connector_from_config(config["name"], config)
+            
+            # Use AI-powered connector generation for unknown APIs
+            if self.settings.gemini_api_key:
+                from .connector_generator import ConnectorGenerator
+                
+                generator = ConnectorGenerator(self.settings)
+                result = generator.generate_connector_config(source)
+                
+                if result.success and result.config:
+                    return client.create_connector_from_config(
+                        result.connector_name,
+                        result.config,
+                    )
+                else:
+                    logger.warning(f"AI connector generation failed: {result.error}")
+            
+            # Fallback: use basic connector from source config
+            return client.create_connector(source)
+            
+        except Exception as e:
+            logger.error(f"Error creating connector for {source.name}: {e}")
+            return None
     
     def _collect_data_from_sources(self, sources: List[DataSource]) -> dict:
         """Collect data from active sources."""

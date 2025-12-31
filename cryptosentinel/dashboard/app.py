@@ -5,6 +5,7 @@ Real-time causal intelligence dashboard built with Streamlit.
 Consumes data from the FastAPI backend.
 """
 
+import os
 import time
 from datetime import datetime, timezone
 from typing import Dict, Optional
@@ -293,8 +294,9 @@ st.markdown("""
 class APIClient:
     """Client for CryptoSentinel API."""
 
-    def __init__(self, base_url: str = "http://localhost:8000"):
-        self.base_url = base_url
+    def __init__(self, base_url: str = None):
+        # Get API URL from environment variable, fallback to localhost
+        self.base_url = base_url or os.getenv("API_URL", "http://localhost:8000")
         self.client = httpx.Client(timeout=10.0, follow_redirects=True)
 
     def get_dashboard_state(self) -> Optional[dict]:
