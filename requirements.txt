@@ -1,0 +1,21 @@
+# Minimal requirements for Streamlit dashboard frontend
+# Backend dependencies are not needed here
+
+# Dashboard
+streamlit>=1.29.0
+plotly>=5.18.0
+
+# API Client (for connecting to backend)
+httpx>=0.25.0
+
+# Configuration
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+pydantic-settings>=2.0.0
+
+# Logging
+loguru>=0.7.0
+
+# Data Processing (for dashboard charts)
+pandas>=2.1.0
+numpy>=1.26.0
