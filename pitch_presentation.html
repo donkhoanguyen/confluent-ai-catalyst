@@ -8,52 +8,130 @@
 
 		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reset.min.css">
 		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.css">
-		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/theme/dracula.min.css">
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/theme/white.min.css">
+		<link href="https://fonts.googleapis.com/css2?family=Architects+Daughter&family=Inter:wght@300;400;700&family=Caveat:wght@400;700&display=swap" rel="stylesheet">
 
-		<!-- Custom Cyberpunk Styling -->
+		<!-- Whiteboard Styling -->
 		<style>
 			:root {
 				--r-main-font: 'Inter', sans-serif;
 				--r-heading-font: 'Inter', sans-serif;
-				--accent-color: #00f2ff;
-				--secondary-color: #7000ff;
+				--marker-blue: #0056b3;
+				--marker-red: #d93025;
+				--marker-black: #202124;
+				--whiteboard-bg: #fdfdfd;
+				--handwriting: 'Architects Daughter', cursive;
+				--sketchy-font: 'Caveat', cursive;
 			}
+			
+			body {
+				background-color: var(--whiteboard-bg);
+				background-image: radial-gradient(#e0e0e0 1px, transparent 1px);
+				background-size: 40px 40px;
+			}
+
+			.reveal {
+				color: var(--marker-black);
+			}
+
 			.reveal h1, .reveal h2, .reveal h3 {
 				text-transform: none;
-				color: var(--accent-color);
-				text-shadow: 0 0 20px rgba(0, 242, 255, 0.3);
+				color: var(--marker-black);
+				font-family: var(--r-heading-font);
+				font-weight: 700;
 			}
+
+			.reveal h1 {
+				font-family: var(--handwriting);
+				color: var(--marker-blue);
+			}
+
 			.reveal .slides section {
 				text-align: left;
 			}
-			.highlight {
-				color: var(--accent-color);
-				font-weight: bold;
+
+			.handwritten {
+				font-family: var(--handwriting);
+				color: var(--marker-blue);
 			}
-			.purple-highlight {
-				color: var(--secondary-color);
-				font-weight: bold;
+
+			.sketchy {
+				font-family: var(--sketchy-font);
+				font-size: 1.4em !important;
+				color: var(--marker-red);
 			}
+
 			.box {
-				background: rgba(255, 255, 255, 0.05);
+				background: #fff;
 				padding: 20px;
-				border-radius: 10px;
-				border-left: 5px solid var(--accent-color);
-				margin-top: 20px;
+				border: 2px solid var(--marker-black);
+				border-radius: 4px;
+				box-shadow: 5px 5px 0px rgba(0,0,0,0.1);
+				margin-top: 15px;
+				position: relative;
 			}
+
+			.box::before {
+				content: "";
+				position: absolute;
+				top: -2px; left: -2px; right: -2px; bottom: -2px;
+				border: 3px solid var(--marker-black);
+				border-radius: 8px 15px 5px 12px;
+				pointer-events: none;
+			}
+
+			.highlight-blue {
+				border-bottom: 3px double var(--marker-blue);
+				padding-bottom: 2px;
+			}
+
+			.highlight-red {
+				color: var(--marker-red);
+				font-weight: bold;
+			}
+
 			.grid {
 				display: grid;
-				grid-template-columns: 1fr 1fr; gap: 20px;
+				grid-template-columns: 1fr 1fr;
+				gap: 20px;
 			}
+
 			.reveal .footer {
 				position: absolute;
 				bottom: 20px;
 				left: 20px;
-				font-size: 0.5em;
-				opacity: 0.5;
+				font-size: 0.6em;
+				opacity: 0.6;
+				font-family: var(--handwriting);
 			}
+
 			.centered {
 				text-align: center !important;
+			}
+
+			.arrow-down {
+				text-align: center;
+				font-size: 1.5em;
+				color: var(--marker-red);
+				margin: 5px 0;
+			}
+
+			.arch-box {
+				border: 2px dashed var(--marker-black);
+				padding: 10px;
+				margin: 10px 0;
+				border-radius: 8px;
+			}
+
+			.arch-grid {
+				display: grid;
+				grid-template-columns: 1fr 1fr 1fr;
+				gap: 10px;
+				text-align: center;
+			}
+
+			.small-text {
+				font-size: 0.7em !important;
 			}
 		</style>
 	</head>
@@ -61,118 +139,128 @@
 		<div class="reveal">
 			<div class="slides">
 
-				<!-- Title Slide -->
-				<section data-background-gradient="linear-gradient(to bottom, #000, #1a0033)" class="centered">
-					<h1>🔬 CausalLab</h1>
-					<h3>AI-Powered Causal Discovery Platform</h3>
-					<p>Autonomous Causal Discovery for Real-Time Streaming Data</p>
-					<div class="footer">Built for Confluent + Google AI Hackathon</div>
+				<!-- Slide 1: Title -->
+				<section class="centered">
+					<h1 style="font-size: 3em;">CausalLab</h1>
+					<h3 class="sketchy">AI-Powered Causal Discovery</h3>
+					<p style="margin-top: 50px;">Autonomous Causal Discovery for <span class="highlight-blue">Real-Time Streaming Data</span></p>
+					<div class="footer">Confluent + Google AI Hackathon</div>
 				</section>
 
-				<!-- Part 1: What is Causal Inference? -->
+				<!-- Slide 2: What is Causal Inference? -->
 				<section>
 					<h2>What is Causal Inference?</h2>
-					<p class="fragment">Beyond simple correlation.</p>
+					<p class="handwritten" style="font-size: 1.2em; margin-bottom: 30px;">"Knowing <u>why</u>, not just <u>what</u>."</p>
+					
 					<div class="grid">
 						<div class="box fragment">
-							<h4>Correlation</h4>
-							<p>"When A happens, B usually happens too."</p>
-							<small>Example: Ice cream sales and shark attacks both go up in summer.</small>
+							<h4 class="handwritten">Correlation</h4>
+							<p>A and B move together.</p>
+							<hr style="border: 0; border-top: 1px dashed #ccc;">
+							<small>Ice cream sales & Shark attacks. <br>(Both caused by <b>Heat</b>)</small>
 						</div>
-						<div class="box fragment" style="border-left-color: var(--secondary-color);">
-							<h4>Causality</h4>
-							<p>"A <strong>causes</strong> B to happen."</p>
-							<small>Example: Heat causes ice cream sales AND heat causes people to swim (sharks).</small>
+						<div class="box fragment" style="border-color: var(--marker-blue);">
+							<h4 class="handwritten" style="color: var(--marker-blue);">Causality</h4>
+							<p>A <u>makes</u> B happen.</p>
+							<hr style="border: 0; border-top: 1px dashed #ccc;">
+							<small>Changing price <b>causes</b> churn.</small>
 						</div>
 					</div>
-					<p class="fragment" style="margin-top: 40px;">Causal Inference is the science of <span class="highlight">proving "Why"</span> things happen, not just "What" happened.</p>
 				</section>
 
-				<!-- Why it matters for Business -->
+				<!-- Slide 3: Why it matters -->
 				<section>
-					<h2>Why it Matters for Business</h2>
+					<h2>Why it Matters</h2>
 					<ul>
-						<li class="fragment"><strong>Stop Wasting Budget:</strong> Don't optimize for metrics that don't drive revenue.</li>
-						<li class="fragment"><strong>Predict Outcomes:</strong> If we change price by $1, what is the <em>true</em> effect on churn?</li>
-						<li class="fragment"><strong>Risk Mitigation:</strong> Identify hidden "confounders" (external factors) that could crash your strategy.</li>
-						<li class="fragment"><strong>Real-Time Strategy:</strong> Reactive data analysis is too slow; autonomous discovery catches trends as they form.</li>
+						<li class="fragment"><b>ROI Focus:</b> Don't optimize noise.</li>
+						<li class="fragment"><b>Predictive:</b> "What if" that works.</li>
+						<li class="fragment"><b>Confounders:</b> Find the "Invisible Factors".</li>
 					</ul>
+					<p class="sketchy fragment" style="margin-top: 20px; text-align: center;">Causality = Strategic Certainty</p>
 				</section>
 
-				<!-- Part 2: How CausalLab Accelerates Science/Business -->
+				<!-- Slide 4: Architecture (NEW SECTION) -->
 				<section>
-					<h2>The Bottleneck</h2>
-					<p>Traditional research takes <span class="highlight">months</span> of manual work:</p>
+					<h2 class="centered">Architecture</h2>
+					<div class="box" style="margin-top: 0;">
+						<div class="centered small-text handwritten">Data Sources (APIs, DBs, IoT, Social)</div>
+						<div class="arrow-down">↓</div>
+						<div class="arch-box" style="background: rgba(0, 86, 179, 0.05);">
+							<div class="centered handwritten" style="color: var(--marker-blue);">Confluent Cloud</div>
+							<div class="arch-grid small-text">
+								<div class="box" style="padding: 5px;">Schema Reg</div>
+								<div class="box" style="padding: 5px;">Kafka Topics</div>
+								<div class="box" style="padding: 5px;">ksqlDB</div>
+							</div>
+						</div>
+						<div class="arrow-down">↓</div>
+						<div class="arch-box" style="background: rgba(217, 48, 37, 0.05);">
+							<div class="centered handwritten" style="color: var(--marker-red);">AI Agent Orchestration (Gemini + LangGraph)</div>
+							<div class="grid small-text">
+								<div class="box" style="border-style: dotted;"><b>Data Curation Agent</b><br>Discovery & Pipelines</div>
+								<div class="box" style="border-style: dotted;"><b>Causal Discovery Agent</b><br>Hypothesis & Testing</div>
+							</div>
+						</div>
+						<div class="arrow-down">↓</div>
+						<div class="centered small-text">FastAPI Backend → Streamlit Dashboard</div>
+					</div>
+				</section>
+
+				<!-- Slide 5: The Acceleration -->
+				<section>
+					<h2>Shrinking Months to Minutes</h2>
+					<p>Traditional Research is <span class="highlight-red">Broken</span>:</p>
+					
+					<div class="box fragment" style="background: #fff9c4; border-radius: 0; transform: rotate(-1deg);">
+						<p class="handwritten small-text">1. Manual Data Hunting (Weeks)</p>
+						<p class="handwritten small-text">2. Cleaning & Joins (Months)</p>
+						<p class="handwritten small-text">3. Statistical Coding (Manual)</p>
+					</div>
+					<div class="centered fragment" style="margin: 10px 0;">
+						<span class="sketchy">CausalLab Automates the Loop</span>
+					</div>
+				</section>
+
+				<!-- Slide 6: How we do it -->
+				<section>
+					<h2>AI-Powered Loop</h2>
 					<div class="grid">
-						<div class="fragment">
-							<p>❌ Manual data hunting</p>
-							<p>❌ Guessing hypotheses</p>
+						<div class="box fragment">
+							<h4 class="handwritten">Discovery</h4>
+							<p class="small-text">AI finds relevant streams & integrates them via Confluent automatically.</p>
 						</div>
-						<div class="fragment">
-							<p>❌ Complex statistical coding</p>
-							<p>❌ Missing hidden factors</p>
+						<div class="box fragment">
+							<h4 class="handwritten">Reasoning</h4>
+							<p class="small-text">Gemini generates hypotheses grounded in the discovered data.</p>
 						</div>
+					</div>
+					<div class="box fragment centered" style="margin-top: 20px; border-color: var(--marker-blue);">
+						<p class="handwritten" style="color: var(--marker-blue);">Automated Confounder Testing</p>
 					</div>
 				</section>
 
-				<!-- The Solution: CausalLab -->
-				<section data-background-color="#111">
-					<h2>Accelerating with CausalLab</h2>
-					<p>We use <span class="highlight">Autonomous AI Agents</span> to shrink months into minutes.</p>
-					<div class="box fragment">
-						<h4>1. Autonomous Data Curation</h4>
-						<p>AI automatically finds relevant APIs, streams, and databases via <strong>Confluent Cloud</strong>.</p>
-					</div>
-					<div class="box fragment" style="border-left-color: var(--secondary-color);">
-						<h4>2. AI Hypothesis Generation</h4>
-						<p>Google Gemini understands your question and builds <strong>grounded hypotheses</strong> from available data.</p>
-					</div>
-				</section>
-
-				<!-- Advanced Inference -->
+				<!-- Slide 7: Case Study -->
 				<section>
-					<h2>Statistical Rigor at Speed</h2>
-					<p>Scientists get the tools they trust, automatically applied:</p>
-					<div class="grid">
-						<div>
-							<ul>
-								<li>Granger Causality</li>
-								<li>Instrumental Variables (IV)</li>
-								<li>Transfer Entropy</li>
-							</ul>
-						</div>
-						<div class="box">
-							<p class="highlight">Auto-Confounder Discovery</p>
-							<p><small>The AI searches for 3rd-party variables that might be "tricking" your results, ensuring <strong>truth</strong>, not just <strong>noise</strong>.</small></p>
-						</div>
+					<h2>Case Study: Crypto</h2>
+					<p class="handwritten">"Does sentiment drive price?"</p>
+					
+					<div class="box fragment" style="border-left: 10px solid var(--marker-blue);">
+						<p><b>Finding:</b> Sentiment leads price by 10m.</p>
+						<p><b>Confidence:</b> 85% <span class="sketchy">(P < 0.01)</span></p>
+						<p><b>Confounders:</b> Controlled for Volume & News.</p>
 					</div>
+					
+					<p class="fragment centered" style="margin-top: 20px;">
+						<span class="highlight-blue" style="font-size: 1.2em;">10x Faster Insights</span>
+					</p>
 				</section>
 
-				<!-- Use Case: Crypto Example -->
-				<section>
-					<h2>Example: Cryptocurrency</h2>
-					<p><strong>Question:</strong> "Does social sentiment cause price movements?"</p>
-					<div class="box fragment">
-						<p>✅ <strong>Result:</strong> Sentiment leads price by 10 minutes (85% confidence).</p>
-						<p>✅ <strong>Controlled for:</strong> Market cap, trading volume, news events.</p>
-					</div>
-					<p class="fragment" style="margin-top:20px;">Research cycle: <span class="highlight">10x Faster</span>.</p>
-				</section>
-
-				<!-- Conclusion -->
-				<section data-background-gradient="linear-gradient(to top, #000, #1a0033)" class="centered">
-					<h2>CausalLab</h2>
-					<h3>Empowering Science & Business</h3>
-					<div class="grid" style="margin-top: 50px;">
-						<div class="box">
-							<h4>For Scientists</h4>
-							<p>Reproducible, faster, and more rigorous research.</p>
-						</div>
-						<div class="box" style="border-left-color: var(--secondary-color);">
-							<h4>For Business</h4>
-							<p>Data-driven decisions with real-time causal certainty.</p>
-						</div>
-					</div>
+				<!-- Slide 8: Conclusion -->
+				<section class="centered">
+					<h2 class="handwritten">CausalLab</h2>
+					<h3>Truth over Noise. Speed over Labor.</h3>
+					<div class="footer">Built with ❤️ for Confluent + Google AI</div>
+					<p style="margin-top: 100px; font-family: var(--handwriting);">Thank you! Questions?</p>
 				</section>
 
 			</div>
@@ -183,7 +271,7 @@
 			Reveal.initialize({
 				hash: true,
 				center: true,
-				transition: 'convex',
+				transition: 'fade',
 				plugins: [ ]
 			});
 		</script>
